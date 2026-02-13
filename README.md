@@ -20,7 +20,7 @@
 
 ##  Overview
 
-**GitHub Academic Evaluator** is an intelligent, open-source CLI program designed to automate the evaluation of programming assignments hosted on GitHub. It combines static code analysis, real program execution, and documentation assessment to provide objective, reproducible, and detailed grading.
+**GitHub Academic Evaluator** is an intelligent, open-source CLI system designed to automate the evaluation of programming assignments hosted on GitHub. It combines static code analysis, real program execution, and documentation assessment to provide objective, reproducible, and detailed grading.
 
 ###  Why This Project?
 
