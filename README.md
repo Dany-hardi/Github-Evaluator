@@ -530,7 +530,6 @@ copies of the Software...
 ### 💬 Get Help
 
 - 📧 **Email**: danyhardi06@gmail.com
-- 💼 **LinkedIn**: [Your Name](https://linkedin.com/in/yourprofile)
 ---
 
 
