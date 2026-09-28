@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block title %}Settings — GitHub Evaluator{% endblock %}
+{% block meta_description %}Configure GitHub tokens, Gemini API key, rubric defaults, and execution options{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:760px">
+
+  <div class="page-header">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-subtitle">Global configuration — stored locally and used as defaults for all sessions</p>
+  </div>
+
+  <form id="settings-form" novalidate>
+
+    <!-- GitHub -->
+    <div class="card mb-6">
+      <div class="card-header">
+        <h2 class="card-title">GitHub Access</h2>
+        <span id="gh-status-badge" class="badge {{ 'badge-success' if has_github else 'badge-error' }}">
+          {{ 'Configured' if has_github else 'Not set' }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label" for="github-token">Personal Access Token</label>
+          <div class="input-group">
+            <input id="github-token" name="github_token" class="input mono"
+                   type="password" value=""
+                   placeholder="{{ '••••••••••••••••' if has_github else 'ghp_...' }}"
+                   autocomplete="off">
+            <button type="button" class="btn btn-ghost" onclick="toggleVisibility('github-token')">Show</button>
+          </div>
+          <span class="form-hint">
+            Requires <strong>repo (read)</strong> scope.
+            <strong>How to get one:</strong>
+            github.com &rarr; Your Avatar &rarr; Settings &rarr; Developer Settings &rarr;
+            Personal Access Tokens &rarr; Tokens (classic) &rarr; Generate new token.
+            Select scope: <code>repo</code> (read-only is enough).
+          </span>
+        </div>
+        <div class="flex items-center gap-4">
+          <button type="button" class="btn btn-ghost btn-sm" id="test-gh-btn" onclick="testGitHub()">
+            Test Connection
+          </button>
+          <span id="gh-test-result" class="text-sm"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gemini -->
+    <div class="card mb-6">
+      <div class="card-header">
+        <h2 class="card-title">Gemini AI Feedback</h2>
+        <span id="gemini-status-badge" class="badge {{ 'badge-success' if has_gemini else 'badge-neutral' }}">
+          {{ 'Configured' if has_gemini else 'Not set (rule-based fallback)' }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="form-group" style="margin-bottom:var(--sp-4)">
+          <label class="form-label" for="gemini-key">API Key</label>
+          <div class="input-group">
+            <input id="gemini-key" name="gemini_api_key" class="input mono"
+                   type="password" value=""
+                   placeholder="{{ '••••••••••••••••' if has_gemini else 'AIza...' }}"
+                   autocomplete="off">
+            <button type="button" class="btn btn-ghost" onclick="toggleVisibility('gemini-key')">Show</button>
+          </div>
+          <span class="form-hint">
+            <strong>How to get one (free):</strong>
+            Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com</a>
+            &rarr; Sign in with Google &rarr; Create API Key &rarr; Copy the key.
+            If left blank, the system uses rule-based feedback (no AI).
+          </span>
+        </div>
+        <div class="alert alert-warning" style="font-size:12px;padding:var(--sp-3) var(--sp-4)">
+          Keys are saved to a <strong>.env</strong> file on this machine and never transmitted or stored in the database.
+        </div>
+      </div>
+    </div>
+
+    <!-- Default Rubric -->
+    <div class="card mb-6">
+      <div class="card-header">
+        <h2 class="card-title">Default Rubric</h2>
+        <span id="settings-rubric-total" class="badge badge-success">100%</span>
+      </div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:var(--sp-5)">
+        {% for field, label, default in [
+            ('default_rubric_code', 'Code Quality', 40),
+            ('default_rubric_execution', 'Execution', 30),
+            ('default_rubric_documentation', 'Documentation', 30),
+          ] %}
+        <div class="range-wrap">
+          <div class="range-header">
+            <span class="form-label">{{ label }}</span>
+            <span id="{{ field }}-val" class="range-value">{{ settings.get(field, default) }}%</span>
+          </div>
+          <input type="range" id="{{ field }}" name="{{ field }}" min="0" max="100" step="5"
+                 value="{{ settings.get(field, default) }}"
+                 oninput="updateSettingsRubric()">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Execution -->
+    <div class="card mb-6">
+      <div class="card-header"><h2 class="card-title">Code Execution</h2></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:var(--sp-5)">
+
+        <label class="toggle-wrap">
+          <input type="checkbox" class="toggle-input" id="docker-toggle" name="docker_enabled"
+                 {{ 'checked' if settings.get('docker_enabled', True) }}>
+          <div class="toggle-track" aria-hidden="true"></div>
+          <span class="toggle-label">Use Docker Sandbox</span>
+        </label>
+        <span class="form-hint" style="margin-top:calc(var(--sp-1)*-1)">
+          Strongly recommended. Falls back to subprocess if Docker is unavailable.
+        </span>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="exec-timeout">Execution Timeout (seconds)</label>
+          <input id="exec-timeout" name="execution_timeout" class="input" type="number"
+                 min="3" max="60" value="{{ settings.get('execution_timeout', 10) }}" style="max-width:100px">
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="file-size">Max File Size (KB)</label>
+          <input id="file-size" name="max_file_size_kb" class="input" type="number"
+                 min="50" max="5000" value="{{ settings.get('max_file_size_kb', 500) }}" style="max-width:120px">
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Grading -->
+    <div class="card mb-6">
+      <div class="card-header"><h2 class="card-title">Grading Scale</h2></div>
+      <div class="card-body">
+        <div class="layout-2col">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" for="grade-scale">Grade Scale</label>
+            <select id="grade-scale" name="grade_scale" class="select" style="max-width:120px">
+              <option value="20" {{ 'selected' if settings.get('grade_scale', 20) == 20 }}>Out of 20</option>
+              <option value="100" {{ 'selected' if settings.get('grade_scale', 20) == 100 }}>Out of 100</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" for="passing-grade">Passing Grade</label>
+            <input id="passing-grade" name="passing_grade" class="input" type="number"
+                   min="1" max="100" value="{{ settings.get('passing_grade', 10) }}" style="max-width:100px">
+            <span class="form-hint">Used for pass-rate statistics on the dashboard</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-4 mb-6">
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+      <button type="button" class="btn btn-ghost" onclick="resetDefaults()">Reset to Defaults</button>
+    </div>
+
+  </form>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Rubric total display
+  function updateSettingsRubric() {
+    const fields = ["default_rubric_code", "default_rubric_execution", "default_rubric_documentation"];
+    let total = 0;
+    fields.forEach((f) => {
+      const el = document.getElementById(f);
+      if (el) {
+        total += parseInt(el.value);
+        const disp = document.getElementById(f + "-val");
+        if (disp) disp.textContent = el.value + "%";
+      }
+    });
+    const badge = document.getElementById("settings-rubric-total");
+    if (badge) {
+      badge.textContent = total + "%";
+      badge.className = total === 100 ? "badge badge-success" : "badge badge-error";
+    }
+  }
+
+  // Save
+  document.getElementById("settings-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      github_token:                fd.get("github_token") || "",
+      gemini_api_key:              fd.get("gemini_api_key") || "",
+      default_rubric_code:         parseInt(fd.get("default_rubric_code")),
+      default_rubric_execution:    parseInt(fd.get("default_rubric_execution")),
+      default_rubric_documentation:parseInt(fd.get("default_rubric_documentation")),
+      docker_enabled:              !!document.getElementById("docker-toggle").checked,
+      execution_timeout:           parseInt(fd.get("execution_timeout")),
+      max_file_size_kb:            parseInt(fd.get("max_file_size_kb")),
+      grade_scale:                 parseInt(fd.get("grade_scale")),
+      passing_grade:               parseInt(fd.get("passing_grade")),
+    };
+
+    const codeW = payload.default_rubric_code + payload.default_rubric_execution + payload.default_rubric_documentation;
+    if (codeW !== 100) { toast("Rubric must sum to 100%", "error"); return; }
+
+    // Only include key fields if the user actually typed something
+    if (!document.getElementById("github-token").value.trim()) delete payload.github_token;
+    if (!document.getElementById("gemini-key").value.trim())   delete payload.gemini_api_key;
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast("Settings saved", "success");
+
+        // Update key status badges live
+        const ghBadge = document.getElementById("gh-status-badge");
+        const geBadge = document.getElementById("gemini-status-badge");
+        if (ghBadge) {
+          ghBadge.textContent  = data.has_github_token ? "Configured" : "Not set";
+          ghBadge.className    = "badge " + (data.has_github_token ? "badge-success" : "badge-error");
+        }
+        if (geBadge) {
+          geBadge.textContent  = data.has_gemini_key ? "Configured" : "Not set (rule-based fallback)";
+          geBadge.className    = "badge " + (data.has_gemini_key ? "badge-success" : "badge-neutral");
+        }
+      } else {
+        toast("Save failed", "error");
+      }
+    } catch (err) { toast("Error: " + err.message, "error"); }
+  });
+
+  // Show/hide password
+  function toggleVisibility(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.type = el.type === "password" ? "text" : "password";
+  }
+
+  // Test GitHub token
+  async function testGitHub() {
+    const token = document.getElementById("github-token").value.trim();
+    if (!token) { toast("Enter a GitHub token first", "warning"); return; }
+    const btn = document.getElementById("test-gh-btn");
+    const res  = document.getElementById("gh-test-result");
+    btn.disabled = true;
+    btn.textContent = "Testing...";
+    res.textContent = "";
+    try {
+      const r = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const data = await r.json();
+        res.textContent = "Connected as " + data.login;
+        res.style.color = "var(--success)";
+      } else {
+        res.textContent = "Invalid token (HTTP " + r.status + ")";
+        res.style.color = "var(--error)";
+      }
+    } catch (err) {
+      res.textContent = "Network error";
+      res.style.color = "var(--error)";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Test Connection";
+    }
+  }
+
+  function resetDefaults() {
+    confirmDialog("Reset all settings to defaults? This will clear your API keys.").then((ok) => {
+      if (!ok) return;
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          github_token: "", gemini_api_key: "",
+          default_rubric_code: 40, default_rubric_execution: 30, default_rubric_documentation: 30,
+          docker_enabled: true, execution_timeout: 10, max_file_size_kb: 500,
+          grade_scale: 20, passing_grade: 10,
+        }),
+      }).then(() => { toast("Defaults restored", "success"); setTimeout(() => location.reload(), 700); });
+    });
+  }
+</script>
+{% endblock %}

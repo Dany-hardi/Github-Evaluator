@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Evaluation Progress — {{ session.name }} — GitHub Evaluator{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <div class="page-header">
+    <div class="flex items-center gap-4">
+      <a href="/" class="btn btn-icon" aria-label="Back to dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+        </svg>
+      </a>
+      <div style="flex:1">
+        <div class="flex items-center gap-4">
+          <h1 class="page-title">{{ session.name }}</h1>
+          <span id="session-status-badge" class="badge badge-info">Running</span>
+        </div>
+        <p class="page-subtitle">
+          Elapsed: <strong id="elapsed">00:00</strong> &nbsp;&middot;&nbsp;
+          <span id="progress-text">Initialising...</span>
+        </p>
+      </div>
+    </div>
+    <div class="page-actions" style="margin-top:var(--sp-4)">
+      <div class="progress-track w-full" style="height:6px">
+        <div id="progress-bar" class="progress-bar animated" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SSE data bridge -->
+  <div id="session-data" data-session-id="{{ session.id }}" hidden></div>
+
+  <div class="eval-grid">
+
+    <!-- Student list panel -->
+    <div>
+      <p class="section-title">Students</p>
+      {% for s in session.get('students', []) %}
+        <div class="student-progress-item pending" id="sp-{{ s.id }}">
+          <div class="status-dot pending" aria-hidden="true"></div>
+          <div style="flex:1;min-width:0">
+            <div class="font-600 truncate">{{ s.name }}</div>
+            <div class="text-sm text-secondary">{{ s.matricule or '—' }}</div>
+          </div>
+          <div>
+            <span class="sp-status text-sm text-secondary">Pending</span>
+            <div id="sp-grade-{{ s.id }}" class="text-sm text-secondary"></div>
+          </div>
+        </div>
+      {% endfor %}
+
+      <div class="mt-6">
+        <a id="view-results-btn" href="#" class="btn btn-primary w-full hidden">
+          View Results
+        </a>
+      </div>
+    </div>
+
+    <!-- Log stream panel -->
+    <div>
+      <p class="section-title">Live Log</p>
+      <div id="log-stream" class="log-stream" aria-live="polite" aria-label="Evaluation log">
+        <div class="log-line muted">Connecting to evaluation stream...</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/progress.js') }}"></script>
+{% endblock %}

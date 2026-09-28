@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}New Evaluation — GitHub Evaluator{% endblock %}
+{% block meta_description %}Configure and launch a new student code evaluation session{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <div class="page-header">
+    <div class="flex items-center gap-4">
+      <a href="/" class="btn btn-icon" aria-label="Back to dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+        </svg>
+      </a>
+      <div>
+        <h1 class="page-title">New Evaluation</h1>
+        <p class="page-subtitle">Configure students, rubric, and evaluation options</p>
+      </div>
+    </div>
+  </div>
+
+  <form id="session-form" novalidate>
+  <div class="layout-2col">
+
+    <!-- Left column: session config -->
+    <div style="display:flex;flex-direction:column;gap:var(--sp-6)">
+
+      <!-- Session details -->
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Session Details</h2></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label" for="session-name">Session Name</label>
+            <input id="session-name" name="name" class="input" type="text"
+                   placeholder="e.g. Group 1 — Lab 3" required autocomplete="off">
+            <span class="form-hint">Used in exports and the results view</span>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" for="gh-token">GitHub Token <span class="text-secondary font-600" style="font-weight:400">(optional override)</span></label>
+            <input id="gh-token" name="github_token" class="input mono" type="password"
+                   placeholder="ghp_... (uses global token if blank)" autocomplete="off">
+            <span class="form-hint">Leave blank to use the token saved in Settings</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rubric -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Rubric Weights</h2>
+          <span id="rubric-total" class="badge badge-success">100%</span>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:var(--sp-6)">
+
+          <div class="range-wrap">
+            <div class="range-header">
+              <span class="form-label">Code Quality</span>
+              <span id="rubric-code-val" class="range-value">{{ settings.default_rubric_code or 40 }}%</span>
+            </div>
+            <input type="range" id="rubric-code" name="rubric_code" min="0" max="100" step="5"
+                   value="{{ settings.default_rubric_code or 40 }}">
+            <span class="form-hint">Structure, comments, functions, indentation</span>
+          </div>
+
+          <div class="range-wrap">
+            <div class="range-header">
+              <span class="form-label">Execution</span>
+              <span id="rubric-execution-val" class="range-value">{{ settings.default_rubric_execution or 30 }}%</span>
+            </div>
+            <input type="range" id="rubric-execution" name="rubric_execution" min="0" max="100" step="5"
+                   value="{{ settings.default_rubric_execution or 30 }}">
+            <span class="form-hint">Compilation and runtime success</span>
+          </div>
+
+          <div class="range-wrap">
+            <div class="range-header">
+              <span class="form-label">Documentation</span>
+              <span id="rubric-documentation-val" class="range-value">{{ settings.default_rubric_documentation or 30 }}%</span>
+            </div>
+            <input type="range" id="rubric-documentation" name="rubric_documentation" min="0" max="100" step="5"
+                   value="{{ settings.default_rubric_documentation or 30 }}">
+            <span class="form-hint">Clarity, structure, technical depth</span>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Options -->
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Options</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:var(--sp-5)">
+
+          <label class="toggle-wrap">
+            <input type="checkbox" class="toggle-input" id="plagiarism-toggle" name="plagiarism_enabled" checked>
+            <div class="toggle-track" aria-hidden="true"></div>
+            <span class="toggle-label">Plagiarism Detection</span>
+          </label>
+          <span class="form-hint" style="margin-top:calc(var(--sp-1)*-1)">Compare all submissions for code similarity</span>
+
+          <label class="toggle-wrap">
+            <input type="checkbox" class="toggle-input" id="ai-toggle" name="ai_feedback_enabled">
+            <div class="toggle-track" aria-hidden="true"></div>
+            <span class="toggle-label">AI Feedback (Gemini)</span>
+          </label>
+          <span class="form-hint" style="margin-top:calc(var(--sp-1)*-1)">Requires a Gemini API key in Settings</span>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right column: student list -->
+    <div style="display:flex;flex-direction:column;gap:var(--sp-6)">
+
+      <!-- Add student manually -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">
+            Students
+            <span class="badge badge-neutral ml-2" id="student-count">0</span>
+          </h2>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openModal('csv-modal')">
+            Import CSV
+          </button>
+        </div>
+        <div class="card-body">
+
+          <!-- Inline add form -->
+          <form id="add-student-form" novalidate style="margin-bottom:var(--sp-5)">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3)">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label" for="s-name">Full Name</label>
+                <input id="s-name" name="name" class="input" type="text"
+                       placeholder="Jane Doe" autocomplete="off" required>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label" for="s-mat">Matricule</label>
+                <input id="s-mat" name="matricule" class="input" type="text"
+                       placeholder="21IM1234" autocomplete="off">
+              </div>
+            </div>
+            <div class="form-group mt-4" style="margin-bottom:0">
+              <label class="form-label" for="s-code">Code Repository URL</label>
+              <input id="s-code" name="code_url" class="input mono" type="url"
+                     placeholder="https://github.com/user/repo" autocomplete="off" required>
+            </div>
+            <div class="form-group mt-4" style="margin-bottom:0">
+              <label class="form-label" for="s-doc">Documentation URL <span class="text-secondary" style="font-weight:400">(optional)</span></label>
+              <input id="s-doc" name="doc_url" class="input mono" type="url"
+                     placeholder="https://github.com/user/docs" autocomplete="off">
+            </div>
+            <div class="mt-4">
+              <button type="submit" class="btn btn-ghost btn-sm">Add Student</button>
+            </div>
+          </form>
+
+          <div class="divider"></div>
+
+          <!-- Student list -->
+          <div id="student-list"></div>
+
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <button id="start-btn" type="submit" form="session-form"
+              class="btn btn-primary btn-lg w-full" disabled>
+        Start Evaluation
+      </button>
+
+    </div>
+  </div>
+  </form>
+
+</div>
+
+<!-- CSV Import Modal -->
+<div id="csv-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="csv-modal-title">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="csv-modal-title">Import Students from CSV</h2>
+      <button class="modal-close" onclick="closeModal('csv-modal')" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:var(--sp-4)">
+        Required columns: <strong>name</strong>, <strong>code_url</strong>. Optional: <strong>matricule</strong>, <strong>doc_url</strong>.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="csv-file">Upload file</label>
+        <input id="csv-file" type="file" accept=".csv,.txt" class="input" style="height:auto;padding:var(--sp-2)">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="csv-import-area">Or paste CSV directly</label>
+        <textarea id="csv-import-area" class="textarea font-mono" style="height:180px;font-size:12px"
+                  placeholder="name,matricule,code_url,doc_url&#10;Jane Doe,21IM1001,https://github.com/jane/code,&#10;John Smith,21IM1002,https://github.com/john/code,"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('csv-modal')">Cancel</button>
+      <button id="csv-import-btn" class="btn btn-primary">Import</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/evaluate.js') }}"></script>
+{% endblock %}
