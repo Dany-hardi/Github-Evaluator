@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} — GitHub Evaluator{% endblock %}
+{% block content %}
+<div class="container" style="min-height:60vh;display:flex;align-items:center;justify-content:center">
+  <div style="text-align:center;max-width:480px">
+    <div style="font-size:80px;font-weight:700;color:var(--border-strong);letter-spacing:-4px;line-height:1;margin-bottom:var(--sp-6)">{{ code }}</div>
+    <h1 class="page-title" style="margin-bottom:var(--sp-3)">{{ title }}</h1>
+    <p class="page-subtitle" style="margin-bottom:var(--sp-8)">{{ message }}</p>
+    <div class="flex gap-4" style="justify-content:center">
+      <a href="/" class="btn btn-primary">Back to Dashboard</a>
+      <button class="btn btn-ghost" onclick="history.back()">Go Back</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
