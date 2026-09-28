@@ -478,14 +478,32 @@ def api_parse_csv():
     for i, row in enumerate(reader, 1):
         name     = resolve(row, "name")
         code_url = resolve(row, "code_url")
-        if not name or not code_url:
-            errors.append(f"Row {i}: 'name' and 'code_url' are required")
+        doc_url  = resolve(row, "doc_url")
+
+        if not code_url:
+            errors.append(f"Row {i}: Missing repository URL")
             continue
+
+        # Auto-prefix http/https
+        if not re.match(r"^https?://", code_url, re.I):
+            code_url = "https://" + code_url
+        if doc_url and not re.match(r"^https?://", doc_url, re.I):
+            doc_url = "https://" + doc_url
+
+        # Auto-derive name if missing
+        if not name:
+            match = re.search(r"github\.com/([^/]+)(?:/([^/]+))?", code_url, re.I)
+            if match:
+                user, repo = match.group(1), match.group(2)
+                name = f"{user}/{repo}" if repo else user
+            else:
+                name = f"Student {i}"
+
         students.append({
             "name":      name,
             "matricule": resolve(row, "matricule"),
             "code_url":  code_url,
-            "doc_url":   resolve(row, "doc_url"),
+            "doc_url":   doc_url,
         })
 
     return jsonify({"students": students, "errors": errors})

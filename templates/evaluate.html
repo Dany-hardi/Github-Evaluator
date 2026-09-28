@@ -125,13 +125,13 @@
         </div>
         <div class="card-body">
 
-          <!-- Inline add form -->
-          <form id="add-student-form" novalidate style="margin-bottom:var(--sp-5)">
+          <!-- Inline add student box -->
+          <div id="add-student-box" style="margin-bottom:var(--sp-5)">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3)">
               <div class="form-group" style="margin-bottom:0">
                 <label class="form-label" for="s-name">Full Name</label>
                 <input id="s-name" name="name" class="input" type="text"
-                       placeholder="Jane Doe" autocomplete="off" required>
+                       placeholder="Jane Doe" autocomplete="off">
               </div>
               <div class="form-group" style="margin-bottom:0">
                 <label class="form-label" for="s-mat">Matricule</label>
@@ -142,17 +142,18 @@
             <div class="form-group mt-4" style="margin-bottom:0">
               <label class="form-label" for="s-code">Code Repository URL</label>
               <input id="s-code" name="code_url" class="input mono" type="url"
-                     placeholder="https://github.com/user/repo" autocomplete="off" required>
+                     placeholder="https://github.com/user/repo" autocomplete="off">
             </div>
             <div class="form-group mt-4" style="margin-bottom:0">
               <label class="form-label" for="s-doc">Documentation URL <span class="text-secondary" style="font-weight:400">(optional)</span></label>
               <input id="s-doc" name="doc_url" class="input mono" type="url"
                      placeholder="https://github.com/user/docs" autocomplete="off">
             </div>
-            <div class="mt-4">
-              <button type="submit" class="btn btn-ghost btn-sm">Add Student</button>
+            <div class="mt-4 flex items-center gap-3">
+              <button type="button" id="add-student-btn" class="btn btn-secondary btn-sm">Add Student</button>
+              <span class="text-sm text-secondary">Press Enter or click to add student</span>
             </div>
-          </form>
+          </div>
 
           <div class="divider"></div>
 

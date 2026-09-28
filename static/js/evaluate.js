@@ -11,59 +11,115 @@ document.addEventListener("DOMContentLoaded", () => {
     execution:     document.getElementById("rubric-execution"),
     documentation: document.getElementById("rubric-documentation"),
   };
-  const displays = {
-    code:          document.getElementById("rubric-code-val"),
-    execution:     document.getElementById("rubric-execution-val"),
-    display_total: document.getElementById("rubric-total"),
-  };
 
-  function updateRubric(changed) {
+  function updateRubric() {
     const vals = {
-      code:          parseInt(sliders.code.value),
-      execution:     parseInt(sliders.execution.value),
-      documentation: parseInt(sliders.documentation.value),
+      code:          parseInt(sliders.code?.value || 40),
+      execution:     parseInt(sliders.execution?.value || 30),
+      documentation: parseInt(sliders.documentation?.value || 30),
     };
     const total = vals.code + vals.execution + vals.documentation;
 
-    document.getElementById("rubric-code-val").textContent          = vals.code + "%";
-    document.getElementById("rubric-execution-val").textContent      = vals.execution + "%";
-    document.getElementById("rubric-documentation-val").textContent  = vals.documentation + "%";
+    if (document.getElementById("rubric-code-val"))
+      document.getElementById("rubric-code-val").textContent = vals.code + "%";
+    if (document.getElementById("rubric-execution-val"))
+      document.getElementById("rubric-execution-val").textContent = vals.execution + "%";
+    if (document.getElementById("rubric-documentation-val"))
+      document.getElementById("rubric-documentation-val").textContent = vals.documentation + "%";
 
     const totalEl = document.getElementById("rubric-total");
     if (totalEl) {
       totalEl.textContent = total + "%";
       totalEl.style.color = total === 100 ? "var(--success)" : "var(--error)";
+      totalEl.className   = total === 100 ? "badge badge-success" : "badge badge-error";
     }
   }
 
   Object.values(sliders).forEach((s) => {
-    if (s) s.addEventListener("input", () => updateRubric(s.id));
+    if (s) s.addEventListener("input", updateRubric);
   });
   updateRubric();
 
-  // ── Manual student add form ───────────────────────────────────────────────
-  const addForm = document.getElementById("add-student-form");
-  if (addForm) {
-    addForm.addEventListener("submit", (e) => {
+  // ── Helper: Normalize URLs ───────────────────────────────────────────────
+  function normalizeUrl(url) {
+    if (!url) return "";
+    let trimmed = url.trim();
+    if (!trimmed) return "";
+    if (!/^https?:\/\//i.test(trimmed)) {
+      trimmed = "https://" + trimmed;
+    }
+    return trimmed;
+  }
+
+  // ── Add student logic ────────────────────────────────────────────────────
+  function addStudentFromInputs() {
+    const nameEl = document.getElementById("s-name");
+    const matEl  = document.getElementById("s-mat");
+    const codeEl = document.getElementById("s-code");
+    const docEl  = document.getElementById("s-doc");
+
+    const name     = (nameEl?.value || "").trim();
+    const matricule= (matEl?.value || "").trim();
+    let code_url   = normalizeUrl(codeEl?.value || "");
+    let doc_url    = normalizeUrl(docEl?.value || "");
+
+    if (!code_url) {
+      if (!name) toast("Please enter a Code Repository URL", "error");
+      return false;
+    }
+
+    // Default student name if left blank
+    const displayName = name || (matricule ? `Student (${matricule})` : `Student ${students.length + 1}`);
+
+    // Deduplicate by code_url
+    if (students.some((s) => s.code_url === code_url)) {
+      toast("This repository URL has already been added to the list", "warning");
+      return false;
+    }
+
+    students.push({
+      name: displayName,
+      matricule,
+      code_url,
+      doc_url,
+    });
+
+    renderStudentList();
+
+    // Reset inputs
+    if (nameEl) nameEl.value = "";
+    if (matEl)  matEl.value  = "";
+    if (codeEl) codeEl.value = "";
+    if (docEl)  docEl.value  = "";
+
+    nameEl?.focus();
+    toast(`Added ${displayName}`, "success", 2000);
+    return true;
+  }
+
+  // Bind Add Student Button
+  const addBtn = document.getElementById("add-student-btn");
+  if (addBtn) {
+    addBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      const fd = new FormData(addForm);
-      const student = {
-        name:      fd.get("name").trim(),
-        matricule: fd.get("matricule").trim(),
-        code_url:  fd.get("code_url").trim(),
-        doc_url:   fd.get("doc_url").trim(),
-      };
-      if (!student.name || !student.code_url) {
-        toast("Name and Code URL are required", "error");
-        return;
-      }
-      students.push(student);
-      renderStudentList();
-      addForm.reset();
-      document.getElementById("s-name")?.focus();
-      toast(`${student.name} added`, "success", 2000);
+      addStudentFromInputs();
     });
   }
+
+  // Bind Enter Key inside Student Input Box
+  ["s-name", "s-mat", "s-code", "s-doc"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addStudentFromInputs();
+        }
+      });
+      // Also update start button enablement as user types
+      el.addEventListener("input", updateStartBtn);
+    }
+  });
 
   // ── CSV batch import ──────────────────────────────────────────────────────
   const csvArea = document.getElementById("csv-import-area");
@@ -89,9 +145,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let added = 0;
         for (const s of data.students) {
-          // Deduplicate by code_url
-          if (!students.find((x) => x.code_url === s.code_url)) {
-            students.push(s);
+          const normCode = normalizeUrl(s.code_url);
+          const normDoc  = normalizeUrl(s.doc_url);
+          if (normCode && !students.find((x) => x.code_url === normCode)) {
+            students.push({
+              name:      s.name || `Student ${students.length + 1}`,
+              matricule: s.matricule || "",
+              code_url:  normCode,
+              doc_url:   normDoc,
+            });
             added++;
           }
         }
@@ -100,7 +162,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (csvArea) csvArea.value = "";
         closeModal("csv-modal");
 
-        if (data.errors.length) {
+        if (data.errors && data.errors.length) {
           toast(`${added} imported, ${data.errors.length} skipped`, "warning");
         } else {
           toast(`${added} student(s) imported`, "success");
@@ -114,7 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ── File upload for CSV ───────────────────────────────────────────────────
+  // File upload for CSV
   const fileInput = document.getElementById("csv-file");
   if (fileInput) {
     fileInput.addEventListener("change", (e) => {
@@ -138,27 +200,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (students.length === 0) {
       container.innerHTML = `
-        <div class="student-list-empty">
-          No students added yet. Use the form or import a CSV.
+        <div class="student-list-empty" style="text-align:center;padding:var(--sp-6);color:var(--text-secondary);font-size:13px">
+          No students added yet. Enter a repo URL above or import a CSV.
         </div>`;
       updateStartBtn();
       return;
     }
 
     container.innerHTML = students.map((s, i) => `
-      <div class="student-row" id="student-row-${i}">
+      <div class="student-row" id="student-row-${i}" style="display:grid;grid-template-columns:1fr 2fr 1.5fr auto;gap:var(--sp-3);align-items:center;padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--border)">
         <div>
           <div class="font-600">${escHtml(s.name)}</div>
           <div class="text-sm text-secondary">${escHtml(s.matricule || "—")}</div>
         </div>
         <div class="truncate text-sm font-mono" title="${escHtml(s.code_url)}">
-          ${escHtml(s.code_url)}
+          <a href="${escHtml(s.code_url)}" target="_blank" rel="noopener">${escHtml(s.code_url)}</a>
         </div>
         <div class="truncate text-sm font-mono text-secondary" title="${escHtml(s.doc_url || '')}">
-          ${s.doc_url ? escHtml(s.doc_url) : '<span class="text-secondary">—</span>'}
+          ${s.doc_url ? `<a href="${escHtml(s.doc_url)}" target="_blank" rel="noopener">${escHtml(s.doc_url)}</a>` : '<span class="text-secondary">—</span>'}
         </div>
-        <div></div>
-        <button class="btn btn-icon sm" onclick="removeStudent(${i})" title="Remove">
+        <button type="button" class="btn btn-icon sm" onclick="removeStudent(${i})" title="Remove">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
@@ -175,7 +236,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateStartBtn() {
     const btn = document.getElementById("start-btn");
-    if (btn) btn.disabled = students.length === 0;
+    const codeVal = (document.getElementById("s-code")?.value || "").trim();
+    if (btn) {
+      // Enable start button if students exist OR if a code URL is currently typed in the input
+      btn.disabled = (students.length === 0 && !codeVal);
+    }
   }
 
   // ── Form submission ───────────────────────────────────────────────────────
@@ -183,18 +248,31 @@ document.addEventListener("DOMContentLoaded", () => {
   if (mainForm) {
     mainForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (students.length === 0) { toast("Add at least one student", "warning"); return; }
+
+      // Auto-add pending student from inputs if typed but not added yet
+      const pendingCode = (document.getElementById("s-code")?.value || "").trim();
+      if (pendingCode) {
+        addStudentFromInputs();
+      }
+
+      if (students.length === 0) {
+        toast("Please add at least one student code repository URL", "warning");
+        document.getElementById("s-code")?.focus();
+        return;
+      }
 
       const codeW = parseInt(sliders.code?.value || 40);
       const execW = parseInt(sliders.execution?.value || 30);
       const docW  = parseInt(sliders.documentation?.value || 30);
       if (codeW + execW + docW !== 100) {
-        toast("Rubric weights must sum to 100%", "error"); return;
+        toast("Rubric weights must sum to 100%", "error");
+        return;
       }
 
+      const sessionName = (document.getElementById("session-name")?.value || "").trim();
       const payload = {
-        name:                    document.getElementById("session-name")?.value.trim(),
-        github_token:            document.getElementById("gh-token")?.value.trim(),
+        name:                    sessionName || `Evaluation — ${new Date().toLocaleDateString()}`,
+        github_token:            (document.getElementById("gh-token")?.value || "").trim(),
         rubric_code:             codeW,
         rubric_execution:        execW,
         rubric_documentation:    docW,
@@ -203,11 +281,9 @@ document.addEventListener("DOMContentLoaded", () => {
         students,
       };
 
-      if (!payload.name) { toast("Session name is required", "error"); return; }
-
       const startBtn = document.getElementById("start-btn");
       startBtn.disabled = true;
-      startBtn.textContent = "Creating...";
+      startBtn.textContent = "Creating Session...";
 
       try {
         const res = await fetch("/api/sessions", {
@@ -217,14 +293,27 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const data = await res.json();
 
-        if (!res.ok) { toast(data.error || "Failed to create session", "error"); return; }
+        if (!res.ok) {
+          toast(data.error || "Failed to create session", "error");
+          startBtn.disabled = false;
+          startBtn.textContent = "Start Evaluation";
+          return;
+        }
 
-        // Start evaluation
-        await fetch(`/api/sessions/${data.session_id}/start`, { method: "POST" });
+        // Start evaluation process
+        startBtn.textContent = "Starting Evaluation...";
+        const startRes = await fetch(`/api/sessions/${data.session_id}/start`, { method: "POST" });
+        if (!startRes.ok) {
+          const startErr = await startRes.json();
+          toast(startErr.error || "Failed to start evaluation", "error");
+          startBtn.disabled = false;
+          startBtn.textContent = "Start Evaluation";
+          return;
+        }
 
         window.location.href = `/progress/${data.session_id}`;
       } catch (err) {
-        toast("Error: " + err.message, "error");
+        toast("Error starting evaluation: " + err.message, "error");
         startBtn.disabled = false;
         startBtn.textContent = "Start Evaluation";
       }
