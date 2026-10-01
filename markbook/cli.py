@@ -227,6 +227,23 @@ def cmd_retry(args) -> int:
     return 0
 
 
+def cmd_stats(args) -> int:
+    from . import stats as st
+    from .store import load_overrides
+    from .views import load_views
+    d = _run_dir(args.run)
+    baseline = None
+    if args.baseline:
+        try:
+            baseline = st.parse_baseline(Path(args.baseline).read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise CliError(f"cannot read baseline {args.baseline}: {exc}")
+    res = st.compute(current(d), load_overrides(d)["decisions"], load_views(d),
+                     idle_minutes=args.idle_minutes, baseline=baseline)
+    print(json.dumps(res, indent=2) if args.json else st.render(res))
+    return 0
+
+
 def cmd_review(args) -> int:
     run = current(_run_dir(args.run))
     queue = [s for s in run["submissions"] if args.all or s["triage"]["state"] == "review"]
@@ -550,6 +567,11 @@ def build_parser() -> argparse.ArgumentParser:
     add("schema", cmd_schema, "print the JSON Schema of report.json")
     sp = add("doctor", cmd_doctor, "check that git, Docker and optional parts are available")
     sp.add_argument("--clean", action="store_true", help="also remove sandbox containers left behind by a killed run")
+
+    sp = add("stats", cmd_stats, "review-effort numbers from the audit log (measured, lower-bound; see docs/MEASURING.md)")
+    sp.add_argument("run"); sp.add_argument("--json", action="store_true")
+    sp.add_argument("--idle-minutes", type=float, default=5.0, help="gaps longer than this are breaks (default 5)")
+    sp.add_argument("--baseline", metavar="CSV", help="submission_id,seconds of the same submissions graded entirely by hand")
 
     sp = add("runs", cmd_runs, "list runs and how many items in each still need review")
     sp.add_argument("--dir", default=str(DEFAULT_RUNS)); sp.add_argument("--json", action="store_true")

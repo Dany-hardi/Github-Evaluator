@@ -2,6 +2,7 @@
 {% block title %}{{ sub.name }} · {{ run.assignment.name }}{% endblock %}
 {% block content %}
 {% set sc = run.assignment.scale %}
+<span id="view-beacon" data-url="{{ url_for('view_event', run_id=run_id, sid=sub.id) }}" hidden></span>
 <div class="page-head">
   <div>
     <p class="crumb"><a href="{{ url_for('index') }}">Runs</a> / <a href="{{ url_for('run_view', run_id=run_id) }}">{{ run.assignment.name }}</a> / <span class="mono">{{ sub.id }}</span></p>

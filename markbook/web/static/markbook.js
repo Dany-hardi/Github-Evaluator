@@ -20,6 +20,16 @@
     form.querySelectorAll(".reviewer-field").forEach(function (f) { f.value = name; });
   });
 
+  // Record that this reviewer opened this submission (same-origin, name + ids + server time only);
+  // `markbook stats` uses it as a session boundary. Failure is silent and harmless.
+  var beacon = document.getElementById("view-beacon");
+  if (beacon && window.fetch) {
+    var who = (nameInput && nameInput.value.trim()) || safeGet() || "web";
+    fetch(beacon.dataset.url, { method: "POST", keepalive: true, credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "reviewer=" + encodeURIComponent(who.slice(0, 60)) }).catch(function () {});
+  }
+
   // j / k move through submissions, unless the user is typing.
   document.addEventListener("keydown", function (ev) {
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
