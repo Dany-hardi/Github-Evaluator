@@ -13,7 +13,7 @@
 
     var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
     var seen = sessionStorage.getItem("markbook.splash");
-    var forced = q.get("splash") === "1";
-    if (!reduce && (forced || (!seen && location.pathname === "/"))) { root.classList.add("splash-on"); }
+    var forced = q.get("splash") === "1", off = q.get("splash") === "0";   /* ?splash=0|1: handy for screenshots and demos */
+    if (!reduce && !off && (forced || (!seen && location.pathname === "/"))) { root.classList.add("splash-on"); }
   } catch (e) { /* storage blocked: default theme, no splash */ }
 })();

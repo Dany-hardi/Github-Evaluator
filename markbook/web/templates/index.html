@@ -45,6 +45,7 @@
       <div class="chips">
         <span class="chip">{{ r.summary.submissions }} submissions</span>
         <span class="chip" title="{% if r.summary.mean is none %}provisional: manual review pending{% endif %}">mean {{ (r.summary.mean if r.summary.mean is not none else r.summary.provisional_mean)|num }}{% if r.summary.mean is none %}*{% endif %}</span>
+        <span class="chip" title="share of submissions with nothing left for a human">{{ resolved|round|int }}% resolved</span>
         {% if r.queue %}<span class="badge review">{{ r.queue }} need review</span>{% else %}<span class="badge auto">all resolved</span>{% endif %}
       </div>
     </a>

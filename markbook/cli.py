@@ -792,7 +792,31 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def banner(unicode_ok: bool = True) -> str:
+    """The Markbook mark (a bookmark with a tick) for the terminal. ASCII fallback for limited locales."""
+    if unicode_ok:
+        mark = [green("  ╭──╮"), green("  │") + yellow("✔ ") + green("│"), green("  │  │"), green("  ╰╲╱╯")]
+    else:
+        mark = [green("  .--."), green("  |") + yellow("v ") + green("|"), green("  |  |"), green("  `\\/'")]
+    text = ["", bold(f"Markbook {__version__}"), dim("Grade repositories. Review only what matters."), ""]
+    hints = ["", dim("try it offline:   ") + "markbook demo", dim("start a course:   ") + "markbook init", ""]
+    rows = [f"{m}  {t}" for m, t in zip(mark, text)]
+    return "\n".join(rows + [f"        {h}" for h in hints[1:3]])
+
+
 def main(argv: list[str] | None = None) -> int:
+    raw = sys.argv[1:] if argv is None else argv
+    for stream in (sys.stdout, sys.stderr):   # never crash while printing (help text, tables use ✓ · −):
+        try:                                  # on an ASCII-only terminal, degrade to '?' instead
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+    if not raw:   # `markbook` alone: a friendly start instead of a usage error
+        enc = (getattr(sys.stdout, "encoding", None) or "").lower()
+        print(banner(unicode_ok=enc.startswith("utf")))
+        print()
+        build_parser().print_help()
+        return 0
     args = build_parser().parse_args(argv)
     try:
         return args.fn(args)

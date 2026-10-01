@@ -38,7 +38,7 @@
     splash.addEventListener("click", finish);
     document.addEventListener("keydown", finish, { once: true });
     splash.addEventListener("animationend", function (e) { if (e.animationName === "splash-out") { finish(); } });
-    setTimeout(finish, 3200);   /* safety net if animationend never fires */
+    setTimeout(finish, 2800);   /* safety net if animationend never fires */
   }
 
   /* ── reviewer name, confirmations ──────────────────────────────────────── */
