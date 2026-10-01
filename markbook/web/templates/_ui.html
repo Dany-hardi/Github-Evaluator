@@ -1,0 +1,25 @@
+{# Shared UI pieces. The mark is defined once here so the header, splash, hero and empty states can never drift. #}
+{% macro mark(cls="") -%}
+<svg class="mark {{ cls }}" viewBox="13 5 38 56" aria-hidden="true" focusable="false">
+  <path class="bm" d="M19 13a4 4 0 0 1 4-4h18a4 4 0 0 1 4 4v43l-13-10-13 10z"/>
+  <path class="hl" d="M21.5 27.2l20.4-2.6.9 6.6-20.4 2.6z"/>
+  <path class="tk" pathLength="1" d="M25.6 30.4l5.2 5.2 8.6-11.4"/>
+</svg>
+{%- endmacro %}
+
+{# A progress ring: pct is 0-100. Drawn with SVG attributes only (the CSP forbids inline styles). #}
+{% macro ring(pct, cls="", label=True, id="") -%}
+{% set p = [[pct or 0, 0]|max, 100]|min %}
+<span class="ring-wrap {{ cls }}"><svg class="ring {{ cls }}" viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+  <circle class="track" cx="18" cy="18" r="15.9155" pathLength="100"/>
+  <circle class="arc" {% if id %}id="{{ id }}" {% endif %}cx="18" cy="18" r="15.9155" pathLength="100" stroke-dasharray="{{ p|round(1) }} 100"/>
+</svg>{% if label %}<span class="ring-n"{% if id %} id="{{ id }}-n"{% endif %}>{{ p|round|int }}%</span>{% endif %}</span>
+{%- endmacro %}
+
+{# A thin grade bar. pct is the grade as a percentage of the scale. #}
+{% macro gbar(pct) -%}
+{% set p = [[pct or 0, 0]|max, 100]|min %}
+<svg class="gbar {{ 'low' if p < 40 else ('mid' if p < 65 else '') }}" viewBox="0 0 100 6" role="img" aria-label="{{ p|round|int }} percent">
+  <rect class="gbar-bg" width="100" height="6" rx="3"/><rect class="gbar-fill" width="{{ p|round(1) }}" height="6" rx="3"/>
+</svg>
+{%- endmacro %}

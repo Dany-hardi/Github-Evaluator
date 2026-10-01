@@ -1,6 +1,18 @@
-# Markbook
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/banner-dark.png">
+    <img alt="Markbook: grade repositories, review only what matters" src="docs/assets/brand/banner-light.png" width="680">
+  </picture>
+</p>
 
-**Grade Git repositories against a rubric you write as code. Sandboxed, reproducible, and built so a human only looks at what a machine can't decide.**
+<p align="center">
+  <a href="https://github.com/Dany-hardi/markbook/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Dany-hardi/markbook/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Python 3.10 to 3.13" src="https://img.shields.io/badge/python-3.10%E2%80%933.13-10223A">
+  <img alt="Linux and macOS" src="https://img.shields.io/badge/platform-linux%20%7C%20macOS-10223A">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-19B37D">
+</p>
+
+**Markbook grades Git repositories against a rubric you write as code. Sandboxed, reproducible, and built so a human only looks at what a machine can't decide.**
 
 `markbook` clones each student's repository, runs your tests inside a locked-down container, checks the README and commit history, flags copied code, applies late penalties, and produces reports your LMS can import. Everything the automation is unsure about lands in a short **review queue**; everything else is done.
 
@@ -25,6 +37,36 @@ FizzBuzz CLI (demo)  (grades out of 20; * = pending manual review)
 ```
 
 `markbook demo` builds a small cohort of local git repositories (a clean solution, a copied pair with renamed variables, an off-by-one bug, a late submission, a syntax error, an unreachable repo) and grades it offline in about two seconds.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/run-dark.png">
+    <img alt="The run page: headline numbers, grade distribution and the review queue" src="docs/assets/screenshots/run-light.png" width="860">
+  </picture>
+</p>
+
+<p align="center"><sub>The same run in the web UI: what needs a human, why, and one click to start reviewing. Both themes ship; it follows your system.</sub></p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/review-dark.png">
+        <img alt="The review page for one submission: score ring, similarity flag, evidence per criterion" src="docs/assets/screenshots/review-light.png">
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/home-dark.png">
+        <img alt="The home page for a new install: a notebook-style welcome with the three steps" src="docs/assets/screenshots/home-light.png">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Review page.</b> Evidence per criterion, a flag with the matching files, every decision audited.</sub></td>
+    <td align="center"><sub><b>First run.</b> Three steps, and a copy-paste demo command.</sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -440,9 +482,11 @@ markbook demo --serve          # demo cohort, then open the UI
 
 Same engine, same run directories: a run started in the browser can be reviewed from the CLI and vice versa.
 
-- **Run page:** headline numbers, grade distribution, review queue first, exports.
-- **Review page:** one card per criterion with the evidence; type points and a comment. Resolving a submission jumps to the next one in the queue. `j`/`k` move between submissions.
-- Server-rendered, no CDN or external requests, strict Content-Security-Policy, keyboard accessible, light and dark themes.
+- **Home:** run cards with how much of each run is resolved, a filter, and a notebook-style welcome on first use. A short intro animation plays once per browser session on the home page; click or press any key to skip it, and it never plays for people who prefer reduced motion.
+- **Run page:** headline numbers, grade distribution, review queue first, a sortable and filterable table, exports, and the equivalent `markbook` command for each view with a copy button.
+- **Review page:** one card per criterion with the evidence; type points and a comment. Resolving a submission jumps to the next one in the queue. `j`/`k` move between submissions, `/` filters, `?` lists the shortcuts.
+- **Light and dark themes** follow your system and can be switched with the toggle; the choice is remembered. Chart colours meet the 3:1 non-text contrast guideline and text meets WCAG AA in both themes (a test enforces it).
+- Server-rendered, no CDN or external requests (the typeface is bundled), strict Content-Security-Policy, keyboard accessible.
 - The UI has **no authentication**. It binds to `127.0.0.1` by default; `markbook serve --host 0.0.0.0` prints a warning. Put it behind an authenticating reverse proxy if you expose it.
 - Uploaded specs must be self-contained: `overlay`/`starter` paths outside the upload are refused. For specs that use `overlay`, `starter` or `cases_file`, put them in a directory and start the UI with `markbook serve --specs DIR`; they then appear in a dropdown on the *New run* page (operator-provided, so trusted).
 - Web rosters accept `https://` repositories only, never local paths.
@@ -526,6 +570,7 @@ markbook/
 ## More docs
 
 - [`docs/DESIGN.md`](docs/DESIGN.md): the design decisions, trade-offs, what was rejected and why.
+- [`docs/BRAND.md`](docs/BRAND.md): the mark, palette, typeface and motion rules, and how the assets are rebuilt.
 - [`docs/MEASURING.md`](docs/MEASURING.md): a fair protocol for measuring the review-time saving.
 - [`docs/AI-CHECK.md`](docs/AI-CHECK.md): how to run the AI live check once with your own key.
 

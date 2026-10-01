@@ -1,0 +1,7 @@
+@font-face { font-family: "Fraunces"; src: url("fraunces.woff2") format("woff2"); font-weight: 100 900; }
+:root { --ink: #10223A; --green: #19B37D; --hl: #FFD43B; --paper: #FBFAF6; }
+* { box-sizing: border-box; margin: 0; }
+body { font-family: ui-sans-serif, system-ui, "Segoe UI", Cantarell, sans-serif; -webkit-font-smoothing: antialiased; }
+.wm { font-family: "Fraunces", Georgia, serif; letter-spacing: -.025em; line-height: 1; }
+.wm b { font-weight: 800; } .wm span { font-weight: 400; }
+svg.mark .bm { fill: var(--green); } svg.mark .hl { fill: var(--hl); } svg.mark .tk { fill: none; stroke: var(--ink); stroke-width: 4.6; stroke-linecap: round; stroke-linejoin: round; }

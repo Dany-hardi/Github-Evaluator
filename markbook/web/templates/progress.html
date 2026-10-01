@@ -1,21 +1,34 @@
 {% extends "base.html" %}
+{% from "_ui.html" import mark %}
 {% block title %}Grading… · Markbook{% endblock %}
 {% block content %}
 <div class="page-head"><div>
+  <p class="crumb"><a href="{{ url_for('index') }}">Runs</a> / <span class="mono">{{ run_id }}</span></p>
   <h1>{{ status.get('name', 'Run') }}</h1>
-  <p class="muted mono">{{ run_id }}</p>
 </div></div>
 
 {% if status.state == 'failed' %}
-<section class="card"><h2>Grading failed</h2>
+<section class="card empty">
+  {{ mark() }}
+  <h2>Grading failed</h2>
   <p class="flash error">{{ status.error }}</p>
-  <a class="btn" href="{{ url_for('new_run') }}">Start a new run</a></section>
+  <a class="btn" href="{{ url_for('new_run') }}">Start a new run</a>
+</section>
 {% else %}
-<section class="card" id="progress" data-url="{{ url_for('run_status', run_id=run_id) }}" data-done-url="{{ url_for('run_view', run_id=run_id) }}">
-  <h2>Grading <span id="count">{{ status.done }} / {{ status.total }}</span></h2>
-  <progress id="bar" max="{{ status.total }}" value="{{ status.done }}" aria-label="Submissions graded"></progress>
-  <p class="muted" id="active" aria-live="polite">{% if status.active %}Working on: {{ status.active|join(', ') }}{% else %}Starting…{% endif %}</p>
-  <p class="hint">Cloning, running tests in the sandbox, then checking similarity across the cohort.</p>
+{% set p = ((status.done / status.total * 100) if status.total else 0)|round(1) %}
+<section class="card working" id="progress" data-url="{{ url_for('run_status', run_id=run_id) }}" data-done-url="{{ url_for('run_view', run_id=run_id) }}">
+  <span class="ring-wrap">
+    <svg class="ring" viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+      <circle class="track" cx="18" cy="18" r="15.9155" pathLength="100"/>
+      <circle class="arc" id="arc" cx="18" cy="18" r="15.9155" pathLength="100" stroke-dasharray="{{ p }} 100"/>
+    </svg>
+    <span class="ring-n" id="pct">{{ p|round|int }}%</span>
+  </span>
+  <h2>Marking <span id="count">{{ status.done }} / {{ status.total }}</span></h2>
+  <div class="active-chips" id="active-chips" aria-hidden="true">{% for a in status.active %}<span class="chip">{{ a }}</span>{% endfor %}</div>
+  <p class="muted" id="active" aria-live="polite">{% if status.active %}Marking {{ status.active|length }} submission{{ 's' if status.active|length != 1 }} right now{% else %}Starting…{% endif %}</p>
+  <p class="hint">Cloning, running tests in the sandbox, then checking similarity across the cohort. This page keeps working if you leave it.</p>
+  <noscript><p class="hint">JavaScript is off: reload this page to see progress.</p></noscript>
 </section>
 {% endif %}
 {% endblock %}
