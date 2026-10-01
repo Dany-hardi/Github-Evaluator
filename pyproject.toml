@@ -28,4 +28,4 @@ markbook = ["schema/*.json", "web/templates/*.html", "web/static/*",
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["docker: needs a working Docker daemon and a locally cached busybox-style image"]
+markers = ["docker: needs a working container runtime (Docker or Podman) and a locally cached image"]

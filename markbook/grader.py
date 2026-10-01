@@ -22,7 +22,7 @@ from . import SCHEMA_VERSION, __version__, checks, similarity
 from .fetch import FetchError, checkout
 from .gitinfo import read_history
 from .roster import Entry
-from .sandbox import SandboxUnavailable, docker_status, ensure_image, make_sandbox
+from .sandbox import SandboxUnavailable, docker_status, ensure_image, make_sandbox, podman_status
 from .spec import Spec
 
 MAX_REPO_BYTES = 200 * 1024 * 1024
@@ -318,14 +318,15 @@ def assignment_block(spec: Spec, runtime: str) -> dict:
 
 
 def preflight(spec: Spec, runtime: str, log: Callable[[str], None] | None = None) -> None:
-    if spec.needs_sandbox and runtime == "docker":
-        ok, detail = docker_status()
+    if spec.needs_sandbox and runtime in ("docker", "podman"):
+        ok, detail = docker_status() if runtime == "docker" else podman_status()
         if not ok:
+            name = runtime.capitalize()
             raise SandboxUnavailable(
-                f"Docker is required to run student code safely, but it is not usable: {detail}.\n"
-                "Start Docker, or, if this machine is already an isolated environment (CI job, VM, "
+                f"{name} is required to run student code safely, but it is not usable: {detail}.\n"
+                f"Start {name}, or, if this machine is already an isolated environment (CI job, VM, "
                 "LXD container), re-run with --sandbox none.")
-        ensure_image(spec.sandbox.image, log)
+        ensure_image(spec.sandbox.image, log, runtime)
 
 
 def grade_entries(spec: Spec, entries: list[Entry], runtime: str, *, jobs: int = 4, token: str | None = None,

@@ -4,7 +4,7 @@ Exit codes (stable, for scripts and CI):
   0  success
   1  runtime error (bad input file, unknown run, …)
   2  usage error (argparse)
-  3  sandbox unavailable (Docker missing/unreachable and --sandbox docker requested)
+  3  sandbox unavailable (Docker/Podman missing/unreachable and that --sandbox requested)
   4  success, but some submissions need human review (only with --fail-on-review)
   5  `pin` wrote its outputs, but some repositories could not be pinned (see pins.json)
   6  ai-check only: AI unavailable (SDK missing, no credentials, or model unreachable); nothing was evaluated
@@ -31,7 +31,7 @@ from .grader import grade_cohort
 from .roster import Entry, RosterError, load_roster, safe_id
 from .report import write_reports
 from .retry import failed_ids, retry_failed
-from .sandbox import SandboxUnavailable, docker_status, remove_orphans
+from .sandbox import CONTAINER_RUNTIMES, RUNTIMES, SandboxUnavailable, container_status, remove_orphans
 from .spec import SpecError, load_spec
 from .store import StoreError, current, load_run, record_decision, save_corpora, save_run
 
@@ -396,16 +396,24 @@ def cmd_doctor(args) -> int:
     print(bold(f"markbook {__version__} (report schema v{SCHEMA_VERSION})"))
     line(sys.version_info >= (3, 10), f"python {sys.version.split()[0]}", "needs ≥ 3.10")
     line(bool(shutil.which("git")), "git", shutil.which("git") or "not found: required to fetch repositories")
-    ok, detail = docker_status()
-    line(ok, "docker (sandbox)", detail if ok else detail + " → use --sandbox none only in an isolated environment")
+    status = {rt: container_status(rt) for rt in CONTAINER_RUNTIMES}
+    for rt, (rt_ok, rt_detail) in status.items():
+        if rt_ok:
+            line(True, f"{rt} (sandbox)", rt_detail)
+        else:  # one working runtime is enough; only fail the check when none is usable
+            print(f"  {dim('•')} {rt} (sandbox)  {dim(rt_detail)}")
+    ok = any(s[0] for s in status.values())
+    line(ok, "container runtime", "usable" if ok else
+         "none usable → install Docker or Podman; --sandbox none only in an isolated environment")
     try:
         import flask  # noqa: F401
         line(True, "flask (web UI)", flask.__version__ if hasattr(flask, "__version__") else "")
     except ImportError:
         line(True, "web UI not installed", "optional: pip install 'markbook[web]'")
     if args.clean:
-        n = remove_orphans() if ok else 0
-        print(f"  {green('✓') if ok else red('✗')} removed {n} orphaned sandbox container(s)")
+        for rt, (rt_ok, _) in status.items():
+            if rt_ok:
+                print(f"  {green('✓')} {rt}: removed {remove_orphans(rt)} orphaned sandbox container(s)")
     tok = _token(None)
     print(f"  {dim('•')} GITHUB_TOKEN: {'set' if tok else 'not set (only needed for private repositories)'}")
     return 0 if ok_all else 1
@@ -565,8 +573,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--repo", action="append", help="repository URL or path (repeatable); alternative to --roster")
     sp.add_argument("--id"); sp.add_argument("--name"); sp.add_argument("--ref", help="branch/tag/commit for --repo")
     sp.add_argument("--out", help=f"output directory (default {DEFAULT_RUNS}/<run-id>)")
-    sp.add_argument("--sandbox", choices=["docker", "none"], default="docker",
-                    help="docker (default, isolated) or none (host; only inside an already-isolated environment)")
+    sp.add_argument("--sandbox", choices=RUNTIMES, default="docker",
+                    help="docker (default) or podman (isolated), or none (host; only inside an already-isolated environment)")
     sp.add_argument("--jobs", type=int, default=4, help="submissions graded in parallel (default 4)")
     sp.add_argument("--lms", action="append", choices=["canvas", "moodle"], default=[],
                     help="also write an LMS import CSV (repeatable)")
@@ -615,7 +623,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--include-pending", action="store_true")
 
     add("schema", cmd_schema, "print the JSON Schema of report.json")
-    sp = add("doctor", cmd_doctor, "check that git, Docker and optional parts are available")
+    sp = add("doctor", cmd_doctor, "check that git, a container runtime (Docker/Podman) and optional parts are available")
     sp.add_argument("--clean", action="store_true", help="also remove sandbox containers left behind by a killed run")
 
     sp = add("stats", cmd_stats, "review-effort numbers from the audit log (measured, lower-bound; see docs/MEASURING.md)")
@@ -628,7 +636,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("retry", cmd_retry, "re-grade only submissions that failed to fetch or errored (same spec)")
     sp.add_argument("run")
-    sp.add_argument("--sandbox", choices=["docker", "none"], default="docker")
+    sp.add_argument("--sandbox", choices=RUNTIMES, default="docker")
     sp.add_argument("--jobs", type=int, default=4); sp.add_argument("--token-env")
 
     sp = add("ai-check", cmd_ai_check, "verify the AI reviewer assist against the live API (sends small synthetic "
@@ -642,13 +650,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("serve", cmd_serve, "start the web UI")
     sp.add_argument("--dir", default=str(DEFAULT_RUNS), help="runs directory (default .markbook/runs)")
     sp.add_argument("--host", default="127.0.0.1"); sp.add_argument("--port", type=int, default=5000)
-    sp.add_argument("--sandbox", choices=["docker", "none"], default="docker")
+    sp.add_argument("--sandbox", choices=RUNTIMES, default="docker")
     sp.add_argument("--jobs", type=int, default=4); sp.add_argument("--token-env")
     sp.add_argument("--specs", help="directory of saved *.yaml specs offered in the UI (may use overlay/starter)")
 
     sp = add("demo", cmd_demo, "generate a sample cohort and grade it (offline, ~2 s)")
     sp.add_argument("--dir"); sp.add_argument("--out")
-    sp.add_argument("--sandbox", choices=["docker", "none"], default="none",
+    sp.add_argument("--sandbox", choices=RUNTIMES, default="none",
                     help="default none: the demo's own code is trusted; docker needs python:3.12-slim")
     sp.add_argument("--serve", action="store_true", help="open the web UI on the result afterwards")
     return p

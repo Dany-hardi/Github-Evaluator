@@ -42,12 +42,12 @@ FizzBuzz CLI (demo)  (grades out of 20; * = pending manual review)
 
 ## Install
 
-Requires **Python ≥ 3.10** and **git**. **Docker** is required to run student code (see [Security model](#security-model)).
+Requires **Python ≥ 3.10** and **git**. **Docker or Podman** is required to run student code (see [Security model](#security-model)); Podman is selected with `--sandbox podman`.
 
 ```bash
 pip install .            # CLI only; the only dependency is PyYAML
 pip install '.[web]'     # adds the web UI (Flask)
-markbook doctor               # checks git, Docker, optional parts
+markbook doctor               # checks git, Docker/Podman, optional parts
 ```
 
 From a clone: `python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'`.
@@ -195,14 +195,14 @@ markbook grade SPEC (--roster CSV | --repo URL ...) [options]
 markbook review RUN [--all] [--json]
 markbook show RUN STUDENT
 markbook override RUN STUDENT [-c CRITERION (-p POINTS | --accept-suggestion)] [--waive-late] [--clear similarity|borderline] [-m COMMENT]
-markbook retry RUN [--sandbox docker|none] [--jobs N]
+markbook retry RUN [--sandbox docker|podman|none] [--jobs N]
 markbook runs [--dir DIR] [--json]
 markbook stats RUN [--idle-minutes N] [--baseline CSV] [--json]
 markbook report RUN [--lms canvas|moodle ...] [--include-pending] [--out DIR]
 markbook schema
 markbook doctor [--clean]
 markbook ai-check [--model M] [--suite] [--json] [--max-cost-usd N]
-markbook serve [--dir DIR] [--host H] [--port P] [--sandbox docker|none]
+markbook serve [--dir DIR] [--host H] [--port P] [--sandbox docker|podman|none]
 markbook demo [--dir DIR] [--out DIR] [--serve]
 ```
 
@@ -214,7 +214,7 @@ markbook demo [--dir DIR] [--out DIR] [--serve]
 |---|---|
 | `--roster FILE` / `--repo URL` | Who to grade (`--repo` is repeatable; add `--id`, `--name`, `--ref` for a single repo). |
 | `--out DIR` | Output directory (default `.markbook/runs/<run-id>`). |
-| `--sandbox docker\|none` | `docker` (default) isolates student code. `none` runs it on this machine; use only inside an environment that is already isolated (CI job, VM, LXD container). |
+| `--sandbox docker\|podman\|none` | `docker` (default) or `podman` isolate student code. `none` runs it on this machine; use only inside an environment that is already isolated (CI job, VM, LXD container). |
 | `--jobs N` | Submissions graded in parallel (default 4). |
 | `--lms canvas\|moodle` | Also write an LMS import CSV (repeatable). |
 | `--include-pending` | Write provisional grades for submissions still awaiting manual review. |
@@ -390,7 +390,9 @@ Student code is untrusted. Treat the grader as a system that runs arbitrary code
 | Output | at most 64 KiB kept per stream |
 | Cleanup | container removed after the submission, including on errors |
 
-**No silent fallback.** If you ask for Docker and it isn't usable, grading stops with exit code 3 and an explanation. `--sandbox none` exists for environments that are *already* isolated, prints a warning, and only applies `ulimit` CPU-time and file-size limits plus a scrubbed environment. It is **not** a sandbox.
+**Podman (`--sandbox podman`)** applies the same controls (the same flags are asserted for both runtimes in a table-driven test). It additionally *reads back* the memory/CPU/PID limits from inside the container and refuses to grade if rootless Podman did not enforce them (cgroup v2 controllers not delegated to your user), instead of running unlimited. **Podman support is verified only by the `podman` CI job; it has not been run on the maintainer's machines.** LXD is not implemented: it uses system containers and `lxc exec`, not an OCI-compatible CLI, so it would be a different design rather than another binary name.
+
+**No silent fallback.** If you ask for Docker or Podman and it isn't usable, grading stops with exit code 3 and an explanation. `--sandbox none` exists for environments that are *already* isolated, prints a warning, and only applies `ulimit` CPU-time and file-size limits plus a scrubbed environment. It is **not** a sandbox.
 
 **Other protections:**
 - Git history, similarity fingerprints and the README are read from the clone *before* any student code runs.
@@ -406,6 +408,7 @@ Student code is untrusted. Treat the grader as a system that runs arbitrary code
 
 Known and deliberate; please don't discover them in production:
 
+- **Podman is CI-verified only**, rootless Podman needs cgroup v2 with the `memory`, `cpu` and `pids` controllers delegated to your user (otherwise grading stops with a message), and image names must be fully qualified (`docker.io/library/python:3.12-slim`).
 - **No network inside the sandbox**, so builds that download dependencies (`pip install`, `npm install`, Maven) fail. Vendor dependencies, or use an image that has them pre-installed.
 - **Commit timestamps are author-controlled.** Lateness is measured from the last commit's time, which a student can set arbitrarily. For high-stakes deadlines, run [`markbook pin`](#pinning-submissions-at-the-deadline) when the deadline passes and grade the pinned roster (`pin --at deadline` is only a best-effort fallback, because it also trusts timestamps).
 - **Similarity is token-based.** It catches renamed variables and reworded comments. It does not catch semantically rewritten code, and short assignments produce short fingerprints (below `min_fingerprints` nothing is flagged). It understands C-family languages (C, C++, Java, JavaScript/TypeScript, Go, Rust, C#, Kotlin, Swift), Python, Ruby and shell.
