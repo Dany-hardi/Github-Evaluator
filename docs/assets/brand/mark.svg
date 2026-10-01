@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Markbook">
+  <rect width="64" height="64" rx="15" fill="#10223A"/>
+  <path d="M19 13a4 4 0 0 1 4-4h18a4 4 0 0 1 4 4v43l-13-10-13 10z" fill="#19B37D"/>
+  <path d="M21.5 27.2l20.4-2.6.9 6.6-20.4 2.6z" fill="#FFD43B"/>
+  <path d="M25.6 30.4l5.2 5.2 8.6-11.4" fill="none" stroke="#10223A" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
