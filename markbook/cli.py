@@ -124,6 +124,9 @@ def cmd_validate(args) -> int:
         print(f"    {c.id:<14} {c.points:>5g}  {c.type}{extra}  {dim(c.title)}")
     if spec.needs_sandbox:
         print(dim(f"  sandbox image: {spec.sandbox.image}"))
+    if spec.prepare:
+        print(dim(f"  prepare: {len(spec.prepare.run)} command(s), {len(spec.prepare.files)} file(s); "
+                  "runs once with network, student containers never get network"))
     return 0
 
 
@@ -290,6 +293,21 @@ def cmd_collect(args) -> int:
                      f"{'…' if len(missing) > 8 else ''}); they appear as errors with code not_graded."),
               file=sys.stderr)
     print(f"\n  {bold('Reports:')} {out}/")
+    return 0
+
+
+def cmd_prepare(args) -> int:
+    from .prepare import ensure_prepared
+    spec = load_spec(args.spec)
+    if spec.prepare is None:
+        raise CliError("this spec has no `prepare` section; nothing to build")
+    eff = ensure_prepared(spec, args.sandbox, lambda m: print(dim(m), file=sys.stderr), force=args.force)
+    info = eff.prepared
+    print(f"{green('✓')} {info['tag']}  {dim('(cached)' if info['cached'] else '(built)')}")
+    for c in info["commands"]:
+        print(dim(f"    $ {c}"))
+    print(dim("  student containers start from this image with --network none; it is rebuilt only when the base "
+              "image, a command, or a prepare file changes"))
     return 0
 
 
@@ -551,6 +569,12 @@ sandbox:
   image: python:3.12-slim               # student code runs only inside this image
   timeout: 10
 
+# Dependencies (e.g. pytest) are installed ONCE, here, with network; student code never gets network.
+# A student's own requirements.txt is deliberately NOT installed. Needs docker or podman.
+# prepare:
+#   files: [requirements.txt]           # next to this spec
+#   run: ["pip install --no-cache-dir -r requirements.txt"]
+
 criteria:
   - id: structure
     title: Required files exist
@@ -707,6 +731,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("run"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--idle-minutes", type=float, default=5.0, help="gaps longer than this are breaks (default 5)")
     sp.add_argument("--baseline", metavar="CSV", help="submission_id,seconds of the same submissions graded entirely by hand")
+
+    sp = add("prepare", cmd_prepare, "build the spec's dependency image now (cached; runs once, with network)")
+    sp.add_argument("spec")
+    sp.add_argument("--sandbox", choices=CONTAINER_RUNTIMES, default="docker")
+    sp.add_argument("--force", action="store_true", help="rebuild even if the image is cached (--no-cache)")
 
     sp = add("runs", cmd_runs, "list runs and how many items in each still need review")
     sp.add_argument("--dir", default=str(DEFAULT_RUNS)); sp.add_argument("--json", action="store_true")

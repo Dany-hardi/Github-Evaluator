@@ -35,7 +35,7 @@ def retry_failed(run_dir: Path, runtime: str, *, jobs: int = 4, token: str | Non
         raise StoreError("cannot retry: the spec has changed since this run (hash differs). "
                          "Re-grading part of a cohort against a different rubric would make grades incomparable; "
                          "run the whole cohort again instead.")
-    preflight(spec, runtime, log)
+    spec = preflight(spec, runtime, log)
 
     targets = {s["id"]: s for s in run["submissions"] if s["id"] in ids}
     entries = [Entry(t["id"], t["name"], t["email"], t["repo"], t["ref"]) for t in targets.values()]

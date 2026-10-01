@@ -21,9 +21,10 @@ from typing import Callable
 from . import SCHEMA_VERSION, __version__, checks, similarity
 from .fetch import FetchError, checkout
 from .gitinfo import read_history
+from .prepare import ensure_prepared
 from .roster import Entry
 from .sandbox import SandboxUnavailable, docker_status, ensure_image, make_sandbox, podman_status
-from .spec import Spec
+from .spec import CODE_CHECKS, Spec
 
 MAX_REPO_BYTES = 200 * 1024 * 1024
 Progress = Callable[[dict], None]
@@ -81,7 +82,7 @@ def _run_criteria(spec: Spec, ctx: checks.Context, sandbox_error: str | None) ->
                 if hard:
                     rec.update(needs_review=True, review_reason=f"dependency '{blockers[0]['id']}' errored")
                 continue
-            if c.type in ("command", "cases") and sandbox_error:
+            if c.type in CODE_CHECKS and sandbox_error:
                 rec["evidence"] = [{"label": "sandbox", "text": sandbox_error}]
                 rec.update(needs_review=True, review_reason="sandbox unavailable for this submission")
                 continue
@@ -312,12 +313,17 @@ def assignment_block(spec: Spec, runtime: str) -> dict:
         "deadline": spec.deadline.isoformat() if spec.deadline else None,
         "late_penalty": {"percent_per_day": spec.late.percent_per_day, "max_percent": spec.late.max_percent,
                          "grace_minutes": spec.late.grace_minutes},
-        "sandbox": {"runtime": runtime, "image": spec.sandbox.image},
+        "sandbox": {"runtime": runtime, "image": spec.sandbox.image,
+                    **({"prepared": spec.prepared} if spec.prepared else {})},
         "criteria": [{"id": c.id, "title": c.title, "type": c.type, "max_points": c.points} for c in spec.criteria],
     }
 
 
-def preflight(spec: Spec, runtime: str, log: Callable[[str], None] | None = None) -> None:
+def preflight(spec: Spec, runtime: str, log: Callable[[str], None] | None = None, *,
+              build: bool = True) -> Spec:
+    """Check the runtime and image, build the `prepare` image if the spec has one, and return the
+    spec to grade with (its `sandbox.image` is the prepared image). `build=False` skips the (possibly
+    slow) build: for callers that only want a fast "is the runtime usable" check."""
     if spec.needs_sandbox and runtime in ("docker", "podman"):
         ok, detail = docker_status() if runtime == "docker" else podman_status()
         if not ok:
@@ -327,6 +333,9 @@ def preflight(spec: Spec, runtime: str, log: Callable[[str], None] | None = None
                 f"Start {name}, or, if this machine is already an isolated environment (CI job, VM, "
                 "LXD container), re-run with --sandbox none.")
         ensure_image(spec.sandbox.image, log, runtime)
+    if build and spec.needs_sandbox and spec.prepare is not None:
+        spec = ensure_prepared(spec, runtime, log)
+    return spec
 
 
 def grade_entries(spec: Spec, entries: list[Entry], runtime: str, *, jobs: int = 4, token: str | None = None,
@@ -401,7 +410,7 @@ def grade_cohort(spec: Spec, entries: list[Entry], runtime: str = "docker", *, j
                  progress: Progress | None = None, run_id: str | None = None,
                  inputs: dict | None = None, log: Callable[[str], None] | None = None,
                  corpora_out: dict | None = None, reviewer=None) -> dict:
-    preflight(spec, runtime, log)
+    spec = preflight(spec, runtime, log)
     created = now_iso()
     subs, corpora = grade_entries(spec, entries, runtime, jobs=jobs, token=token, allow_local=allow_local,
                                   progress=progress, reviewer=reviewer)

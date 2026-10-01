@@ -89,6 +89,12 @@ A student can set their display name to `=HYPERLINK(...)`; opened in Excel, the 
 ### AI as a reviewer, not a judge
 The earlier project graded with an LLM. Here the model may only *suggest*, because a grade a teacher cannot explain or reproduce is worse than no automation. Design: two opt-ins (the spec marks the criterion `ai: true`, and the run passes `--ai`) because it sends student code to a third party; the criterion stays pending and the suggestion is shown beside it, so it **does not count toward the review-load reduction** (a human still decides); student code goes in as delimited data with break-outs neutralised and the model told to report, not obey, instructions inside it; output is schema-constrained and clamped; whole files only, with the omitted files listed and confidence capped when code wasn't seen; the audit log records the AI's number next to the human's, including disagreements. Mutation-checked: disabling the neutraliser and the clamp makes three tests fail. The request was verified against the real SDK's wire format with a local fake server; it has **not** been run against the live API.
 
+### Dependencies without giving student code the network
+Real assignments need `pytest` or a Maven cache, and the sandbox has no network. The obvious fix (install each student's requirements with network on) is wrong: `pip install` and `npm install` run student-controlled build scripts, so it would give strangers' code egress from the grading machine, including a route to anything that machine can reach. So the dependency step is **cohort-level and teacher-authored**: `prepare` runs once, with network, using only the spec's commands and files, and bakes the result into an image keyed on (base image id, commands, file contents). Students then run on that image with `--network none` as before. The price is explicit: a student's own requirements file is not honoured. Hardening that came with it: commands go through the Dockerfile JSON exec form (a newline or quote in a command cannot add an instruction; tested, and mutation-checked), image references are validated, `prepare` is refused in web uploads, `--sandbox none` refuses rather than installing onto the host, and a failing build stops the run before any student is graded.
+
+### Per-test credit, and where it can be forged
+`junit` gives partial credit from a test runner's JUnit XML, which is how most courses actually test. It inherits the rule "a check satisfiable by doing nothing is a bug": zero tests found earns nothing (`min_tests`, default 1), a committed report is deleted before the run, and the report is parsed defensively (size limit, no DOCTYPE/ENTITY, no symlink reads). What it cannot fix is that the runner imports the student's code in-process, so a determined student can forge the report from inside; the docs say so and point to `cases` (black-box) for high-stakes work.
+
 ### Triage is the product
 `triage.state` is `auto` or `review`, and a review item always has a *reason code*: `criterion` (manual or errored), `similarity`, `borderline`, `fetch_failed`. `borderline` (score within a margin of the pass mark) exists because that is exactly where a human's time is best spent.
 
@@ -122,7 +128,7 @@ Security posture: no authentication (stated plainly in the README; binds to loca
 
 ## What is still weak
 
-- **No network in the sandbox** blocks dependency installs. A per-spec "prepare" phase with network but no student code (e.g. restoring from a lockfile) is the obvious next step.
+- **Dependencies are the teacher's, not the student's.** `prepare` installs teacher-chosen dependencies once, so a student's own requirements file is ignored, and a queue run's report does not yet record the prepared-image key (each worker builds its own image).
 - **Timestamps**: lateness uses commit time. Pinning to a deadline-time `ref` from the roster works today; automating the capture of those refs from GitHub Classroom does not exist yet.
 - **Similarity** is token-based and only as good as the token stream; short assignments give short fingerprints.
 - **LMS formats** follow the documented layouts and are format-tested, but were not imported into a live Canvas or Moodle.

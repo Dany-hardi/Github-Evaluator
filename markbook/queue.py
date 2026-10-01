@@ -85,7 +85,7 @@ def _tree_sha256(root: Path) -> str:
 
 
 def _references_inputs(doc: dict) -> bool:
-    if doc.get("overlay") or doc.get("starter"):
+    if doc.get("overlay") or doc.get("starter") or doc.get("prepare"):
         return True
     for c in doc.get("criteria") or []:
         check = c.get("check") if isinstance(c, dict) else None
@@ -325,8 +325,16 @@ def enqueue(spec_path: str | Path, entries: list[Entry], root: str | Path, runti
     if _references_inputs(raw):
         # The spec reaches for files next to it: freeze the whole source directory so workers
         # on other machines grade with exactly these overlay/starter/cases files.
-        shutil.copytree(spec.source_dir, frozen, dirs_exist_ok=True, symlinks=True,
-                        ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        # The queue directory may itself live inside the spec directory (`--queue ./q` next to
+        # spec.yaml): copying it into itself recursed forever. Skip the queue root, and `.markbook`
+        # (other runs' data), when freezing.
+        root_resolved = root.resolve()
+        skip = shutil.ignore_patterns(".git", "__pycache__", ".markbook")
+
+        def ignore(directory, names):
+            hit = {n for n in names if (Path(directory) / n).resolve() == root_resolved}
+            return set(skip(directory, names)) | hit
+        shutil.copytree(spec.source_dir, frozen, dirs_exist_ok=True, symlinks=True, ignore=ignore)
         try:
             load_spec(frozen / spec_path.name)
         except SpecError as exc:
@@ -440,7 +448,7 @@ class Worker:
 
     def run(self, *, install_signals: bool = True) -> int:
         spec = self.q.load_spec()
-        preflight(spec, self.q.meta["runtime"], self.log)
+        spec = preflight(spec, self.q.meta["runtime"], self.log)
         self._write_hb()
         self._hb_stop = threading.Event()
         hb = threading.Thread(target=self._heartbeat_loop, daemon=True)
