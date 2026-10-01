@@ -31,10 +31,10 @@ FizzBuzz CLI (demo)  (grades out of 20; * = pending manual review)
 ## Contents
 
 - [Install](#install) · [Quick start](#quick-start) · [How grading works](#how-grading-works)
-- [Writing a spec](#writing-a-spec) · [Roster](#roster)
+- [Writing a spec](#writing-a-spec) · [Roster](#roster) · [Pinning at the deadline](#pinning-submissions-at-the-deadline)
 - [CLI reference](#cli-reference) · [Exit codes](#exit-codes)
 - [Reports & LMS integration](#reports--lms-integration) · [Use in CI](#use-in-ci)
-- [Review workflow](#review-workflow) · [Retrying failures](#retrying-failures) · [Scaling out](#scaling-out-with-a-job-queue) · [AI reviewer assist](#ai-reviewer-assist-optional) · [Web UI](#web-ui)
+- [Review workflow](#review-workflow) · [Measuring the saving](#measuring-the-saving) · [Retrying failures](#retrying-failures) · [Scaling out](#scaling-out-with-a-job-queue) · [AI reviewer assist](#ai-reviewer-assist-optional) · [Web UI](#web-ui)
 - [Security model](#security-model) · [Limitations](#limitations)
 - [Development](#development) · [More docs](#more-docs)
 
@@ -456,7 +456,7 @@ Known and deliberate; please don't discover them in production:
 
 ```bash
 pip install -e '.[dev]'
-pytest                      # 138 tests, ~40 s
+pytest                      # ~250 tests, ~1 min
 MARKBOOK_TEST_IMAGE=busybox:latest pytest -m docker   # isolation tests need Docker + a local image
 markbook demo --dir /tmp/demo    # regenerate the fixture cohort
 ```
@@ -484,6 +484,8 @@ markbook/
 ## More docs
 
 - [`docs/DESIGN.md`](docs/DESIGN.md): the design decisions, trade-offs, what was rejected and why.
+- [`docs/MEASURING.md`](docs/MEASURING.md): a fair protocol for measuring the review-time saving.
+- [`docs/AI-CHECK.md`](docs/AI-CHECK.md): how to run the AI live check once with your own key.
 
 ## License
 

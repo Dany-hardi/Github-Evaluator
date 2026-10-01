@@ -483,7 +483,8 @@ def cmd_doctor(args) -> int:
          "none usable → install Docker or Podman; --sandbox none only in an isolated environment")
     try:
         import flask  # noqa: F401
-        line(True, "flask (web UI)", flask.__version__ if hasattr(flask, "__version__") else "")
+        from importlib.metadata import version as _pkg_version
+        line(True, "flask (web UI)", _pkg_version("flask"))
     except ImportError:
         line(True, "web UI not installed", "optional: pip install 'markbook[web]'")
     if args.clean:
