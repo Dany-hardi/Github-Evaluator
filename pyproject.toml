@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "markbook"
+version = "3.0.0"
+description = "Grade Git repositories against a rubric-as-code spec: sandboxed, reproducible, LMS-ready."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+web = ["Flask>=3.0"]
+ai = ["anthropic>=1.0"]
+dev = ["pytest>=8", "jsonschema>=4", "Flask>=3.0", "anthropic>=1.0"]
+
+[project.scripts]
+markbook = "markbook.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["markbook*"]
+
+[tool.setuptools.package-data]
+markbook = ["schema/*.json", "web/templates/*.html", "web/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["docker: needs a working Docker daemon and a locally cached busybox-style image"]

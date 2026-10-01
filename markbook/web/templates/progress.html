@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Grading… · Markbook{% endblock %}
+{% block content %}
+<div class="page-head"><div>
+  <h1>{{ status.get('name', 'Run') }}</h1>
+  <p class="muted mono">{{ run_id }}</p>
+</div></div>
+
+{% if status.state == 'failed' %}
+<section class="card"><h2>Grading failed</h2>
+  <p class="flash error">{{ status.error }}</p>
+  <a class="btn" href="{{ url_for('new_run') }}">Start a new run</a></section>
+{% else %}
+<section class="card" id="progress" data-url="{{ url_for('run_status', run_id=run_id) }}" data-done-url="{{ url_for('run_view', run_id=run_id) }}">
+  <h2>Grading <span id="count">{{ status.done }} / {{ status.total }}</span></h2>
+  <progress id="bar" max="{{ status.total }}" value="{{ status.done }}" aria-label="Submissions graded"></progress>
+  <p class="muted" id="active" aria-live="polite">{% if status.active %}Working on: {{ status.active|join(', ') }}{% else %}Starting…{% endif %}</p>
+  <p class="hint">Cloning, running tests in the sandbox, then checking similarity across the cohort.</p>
+</section>
+{% endif %}
+{% endblock %}

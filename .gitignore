@@ -43,3 +43,8 @@ evaluation_*.xlsx
 .DS_Store
 .idea/
 .vscode/
+.venv/
+.markbook/
+markbook-out/
+*.egg-info/
+.pytest_cache/
