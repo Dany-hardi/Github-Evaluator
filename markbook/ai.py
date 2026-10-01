@@ -175,3 +175,28 @@ class Reviewer:
             }
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {_clip(str(exc), 200)}"}
+
+
+# ── published per-token prices (USD per million tokens: input, output) ───────
+# Used only to *estimate* cost in `markbook ai-check`. Models not listed have unknown cost.
+PRICES_PER_MTOK = {
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+MAX_OUTPUT_TOKENS = 16000   # the max_tokens that Reviewer.suggest sends
+
+
+def price_for(model: str) -> tuple[float, float] | None:
+    """(input, output) USD per MTok for a known model id (dated snapshots match their family), else None."""
+    for name in sorted(PRICES_PER_MTOK, key=len, reverse=True):
+        if model == name or model.startswith(name + "-"):
+            return PRICES_PER_MTOK[name]
+    return None
+
+
+def estimate_cost_usd(model: str, input_tokens: float, output_tokens: float) -> float | None:
+    price = price_for(model)
+    if price is None:
+        return None
+    return (input_tokens * price[0] + output_tokens * price[1]) / 1_000_000
