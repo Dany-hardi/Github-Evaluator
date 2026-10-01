@@ -205,6 +205,9 @@ class DockerSandbox(Sandbox):
                 proc.stdin.close()
             except OSError:
                 pass
+            # Detach the closed pipe: communicate() flushes stdin if it is still set, and
+            # Python < 3.13 raises "ValueError: flush of closed file" (3.13 tolerates it).
+            proc.stdin = None
         _, err = proc.communicate(timeout=120)
         if proc.returncode != 0:
             raise SandboxUnavailable("failed to copy sources into the container (does the image have `tar`?): "
