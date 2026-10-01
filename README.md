@@ -168,11 +168,29 @@ bob,Bob Okafor,bob@uni.edu,owner/bob-lab3,a1b2c3d
 
 Accepted repo forms: `https://github.com/o/r`, `github.com/o/r`, `o/r`, `git@github.com:o/r.git`, and `.../tree/<branch>/<subdir>` (grades only that subdirectory). The CLI also accepts local paths; the web UI does not. Put the identifier your LMS expects in `id` (see below).
 
+## Pinning submissions at the deadline
+
+Lateness read from commit timestamps is only as honest as the student's clock, and a student can keep pushing after the deadline. `markbook pin` records, per student, the exact commit that existed at the deadline; `grade` then grades *that* commit.
+
+```bash
+markbook pin spec.yaml --roster roster.csv --bundle evidence/   # run when the deadline passes
+markbook grade spec.yaml --roster roster.pinned.csv
+```
+
+- **`--at now`** (default): resolves each repository's current tip with `git ls-remote` (no clone). It records the remote's state at capture time, so commit-timestamp tricks cannot backdate it. A roster `ref` (branch or tag) is resolved the same way; a full SHA is kept as is.
+- **`--at deadline`**: retroactive. Clones (blobless) and takes the last commit dated on or before the spec's `deadline`. This **still trusts commit timestamps**, which a student can backdate, so it is a best-effort fallback, not evidence. Needs a `deadline` in the spec.
+- **Output:** `roster.pinned.csv` (all original columns, `ref` filled, plus `pinned_at`, UTC) and `pins.json` next to it (per student: repo, sha, mode, captured_at, `verified`, bundle, `error`). `verified` means the SHA was seen as an advertised tip or found in a clone; a given SHA that is not a current tip is not claimed as verified.
+- **Failures** (private, missing or empty repo, no commit before the deadline) keep an empty `pinned_at` and an `error` code in `pins.json`; any original `ref` is left untouched, so check `pinned_at`. Everything else is still written and the command exits **5**.
+- **`--bundle DIR`** also stores `<id>-<sha12>.bundle` per student (a full clone, so it can be large) and checks it contains the SHA. Restore with `git init r && git -C r fetch ../evidence/alice-<sha12>.bundle refs/markbook/pin`.
+
+`pin` only helps if it runs promptly: with `--at now` the capture time is when you run it, not the deadline. Tokens work as in `grade` (`--token-env`, only sent to `github.com`).
+
 ## CLI reference
 
 ```
 markbook init [DIR] [--template python|c] [--force]
 markbook validate SPEC
+markbook pin SPEC --roster CSV [--out CSV] [--at now|deadline] [--bundle DIR] [--token-env VAR] [--jobs N]
 markbook grade SPEC (--roster CSV | --repo URL ...) [options]
 markbook review RUN [--all] [--json]
 markbook show RUN STUDENT
@@ -221,6 +239,7 @@ markbook review .markbook/runs/20260302-0900-ab12 --json | jq -r '.[].id'
 | 2 | Usage error |
 | 3 | Sandbox unavailable (Docker missing or unreachable and `--sandbox docker` requested). Nothing is graded and nothing is written. |
 | 4 | Success, but items need review (only with `--fail-on-review`) |
+| 5 | `pin` wrote its outputs, but some repositories could not be pinned (see `pins.json`) |
 
 ## Reports & LMS integration
 
@@ -382,7 +401,7 @@ Student code is untrusted. Treat the grader as a system that runs arbitrary code
 Known and deliberate; please don't discover them in production:
 
 - **No network inside the sandbox**, so builds that download dependencies (`pip install`, `npm install`, Maven) fail. Vendor dependencies, or use an image that has them pre-installed.
-- **Commit timestamps are author-controlled.** Lateness is measured from the last commit's time, which a student can set arbitrarily. For high-stakes deadlines, pin each student to a `ref` captured at the deadline (for example from GitHub Classroom).
+- **Commit timestamps are author-controlled.** Lateness is measured from the last commit's time, which a student can set arbitrarily. For high-stakes deadlines, run [`markbook pin`](#pinning-submissions-at-the-deadline) when the deadline passes and grade the pinned roster (`pin --at deadline` is only a best-effort fallback, because it also trusts timestamps).
 - **Similarity is token-based.** It catches renamed variables and reworded comments. It does not catch semantically rewritten code, and short assignments produce short fingerprints (below `min_fingerprints` nothing is flagged). It understands C-family languages (C, C++, Java, JavaScript/TypeScript, Go, Rust, C#, Kotlin, Swift), Python, Ruby and shell.
 - **Rubric checks are mechanical.** README and history checks measure structure, not quality. That is what `manual` criteria are for.
 - **AI is advisory only** and has not been run against the live API (see above). No grade ever depends on a model: there is no automatic AI scoring.

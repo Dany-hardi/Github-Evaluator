@@ -6,6 +6,7 @@ Exit codes (stable, for scripts and CI):
   2  usage error (argparse)
   3  sandbox unavailable (Docker missing/unreachable and --sandbox docker requested)
   4  success, but some submissions need human review (only with --fail-on-review)
+  5  `pin` wrote its outputs, but some repositories could not be pinned (see pins.json)
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ from .store import StoreError, current, load_run, record_decision, save_corpora,
 
 DEFAULT_RUNS = Path(".markbook/runs")
 
-EXIT_ERROR, EXIT_SANDBOX, EXIT_REVIEW = 1, 3, 4
+EXIT_ERROR, EXIT_SANDBOX, EXIT_REVIEW, EXIT_PIN = 1, 3, 4, 5
 
 _COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
 def _c(code: str, s: str) -> str:
@@ -182,6 +183,36 @@ def cmd_grade(args) -> int:
             print(f"  {bold('Next:')} markbook review {out}")
     needs = any(s["triage"]["state"] == "review" for s in run["submissions"])
     return EXIT_REVIEW if (args.fail_on_review and needs) else 0
+
+
+def cmd_pin(args) -> int:
+    from .pin import pin_roster
+    spec = load_spec(args.spec)
+    out = Path(args.out) if args.out else Path(args.roster).with_suffix(".pinned.csv")
+    if args.at == "deadline":
+        if spec.deadline is None:
+            raise CliError("--at deadline needs a `deadline` in the spec, and this spec has none")
+        print(yellow("⚠ --at deadline trusts commit timestamps, which students can backdate; "
+                     "it is a best-effort fallback. Prefer `--at now` when the deadline passes."), file=sys.stderr)
+    done, lock = [0], threading.Lock()
+
+    def progress(p) -> None:
+        with lock:
+            done[0] += 1
+            print(dim(f"[{done[0]}] {p.id}: " + (p.sha[:10] if p.sha else f"FAILED ({p.error})")), file=sys.stderr)
+
+    res = pin_roster(args.roster, out, mode=args.at, deadline=spec.deadline, token=_token(args.token_env),
+                     bundle_dir=args.bundle, jobs=args.jobs, spec_name=spec.name, progress=progress)
+    for p in res.pins:
+        status = green(p.sha[:12]) if p.sha and not p.error else red(p.error or "?")
+        print(f"  {p.id:<16} {status}  {dim(p.message or p.via)}")
+    print(f"\n  {bold('Pinned:')} {len(res.pins) - len(res.failed)}/{len(res.pins)}  "
+          f"{dim('->')} {res.out_csv}, {res.manifest}")
+    if res.failed:
+        print(yellow(f"  {len(res.failed)} row(s) not (fully) pinned: see pins.json for the error codes."),
+              file=sys.stderr)
+        return EXIT_PIN
+    return 0
 
 
 def cmd_runs(args) -> int:
@@ -487,7 +518,7 @@ criteria:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="markbook", description="Grade Git repositories against a rubric-as-code spec.",
                                 epilog="Docs: README.md · Exit codes: 0 ok, 1 error, 3 sandbox unavailable, "
-                                       "4 needs review (--fail-on-review)")
+                                       "4 needs review (--fail-on-review), 5 some pins failed")
     p.add_argument("--version", action="version", version=f"markbook {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True, metavar="COMMAND")
 
@@ -525,6 +556,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--ai-model", default=DEFAULT_MODEL, help=f"model for --ai (default {DEFAULT_MODEL})")
     sp.add_argument("--fail-on-review", action="store_true", help="exit 4 if anything needs review")
     sp.add_argument("--quiet", action="store_true")
+
+    sp = add("pin", cmd_pin, "record each student's commit SHA at the deadline into a pinned roster")
+    sp.add_argument("spec"); sp.add_argument("--roster", required=True, help="roster CSV to pin")
+    sp.add_argument("--out", help="pinned roster to write (default <roster>.pinned.csv; pins.json goes next to it)")
+    sp.add_argument("--at", choices=["now", "deadline"], default="now",
+                    help="now (default): record each repo's current tip via `git ls-remote`; run it when the deadline "
+                         "passes, immune to commit-timestamp tricks. deadline: retroactive, last commit dated <= the "
+                         "spec's deadline; STILL TRUSTS commit timestamps (backdatable), best-effort fallback only")
+    sp.add_argument("--bundle", metavar="DIR", help="also store a `git bundle` of each pinned commit in DIR "
+                                                    "(evidence survives force-push or deletion)")
+    sp.add_argument("--token-env", help="env var holding a GitHub token (default GITHUB_TOKEN, then GH_TOKEN)")
+    sp.add_argument("--jobs", type=int, default=4, help="repositories pinned in parallel (default 4)")
 
     sp = add("review", cmd_review, "list what needs a human, with the exact command to resolve each item")
     sp.add_argument("run"); sp.add_argument("--all", action="store_true"); sp.add_argument("--json", action="store_true")
