@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import mark, ring %}
 {% block title %}{{ sub.name }} · {{ run.assignment.name }}{% endblock %}
 {% block content %}
 {% set sc = run.assignment.scale %}
@@ -10,6 +11,7 @@
     <p class="muted mono small">{{ sub.repo }}{% if sub.commit %} @ {{ sub.commit[:10] }}{% endif %}</p>
   </div>
   <nav class="pager" aria-label="Move between submissions">
+    <span class="progress-note">{% if in_queue %}{{ queue_left }} left in queue{% else %}resolved{% endif %}</span>
     {% if prev_id %}<a class="btn ghost small" id="prev" href="{{ url_for('submission_view', run_id=run_id, sid=prev_id) }}" accesskey="k">← Prev <kbd>k</kbd></a>{% endif %}
     {% if next_id %}<a class="btn ghost small" id="next" href="{{ url_for('submission_view', run_id=run_id, sid=next_id) }}" accesskey="j">Next <kbd>j</kbd> →</a>{% endif %}
   </nav>
@@ -21,9 +23,13 @@
   <p class="muted">Fix the repository URL or access, then re-run just this student by adding them to a new run.</p></section>
 {% else %}
 
-<section class="scorebar card">
-  <div><div class="big">{{ sub.score.scaled|num }}<span class="muted"> / {{ sc|num }}</span>{% if not sub.score.complete %}<span class="badge review">provisional</span>{% endif %}</div>
+{% set gp = (sub.score.scaled / sc * 100) if (sub.score.scaled is not none and sc) else 0 %}
+<section class="scorebar card rise">
+  <div class="left">
+    {{ ring(gp, 'lg' ~ (' warn' if not sub.score.complete else '')) }}
+    <div><div class="big">{{ sub.score.scaled|num }}<span class="muted"> / {{ sc|num }}</span>{% if not sub.score.complete %}<span class="badge review">provisional</span>{% endif %}</div>
     <div class="muted small">{{ sub.score.final|num }} of {{ sub.score.max|num }} points{% if sub.score.penalty %} · late penalty −{{ sub.score.penalty|num }}{% endif %}{% if sub.score.pending_points %} · {{ sub.score.pending_points|num }} pending{% endif %}</div></div>
+  </div>
   <div class="meta small">
     {% if sub.history and sub.history.commits is not none %}<div>{{ sub.history.commits }} commits · {{ sub.history.active_days }} active day{{ 's' if sub.history.active_days != 1 }} · {{ sub.history.authors }} author{{ 's' if sub.history.authors != 1 }}</div>{% endif %}
     {% if sub.late and sub.late.is_late %}<div>⏰ {{ sub.late.hours_late|num }} h after the deadline
@@ -36,7 +42,7 @@
 </section>
 
 {% for r in sub.triage.reasons if r.code in ('similarity', 'borderline') %}
-<section class="card flagcard {{ r.code }}">
+<section class="card flagcard {{ r.code }} rise">
   <h2>{{ 'Similar to another submission' if r.code == 'similarity' else 'Close to the pass mark' }}</h2>
   <p>{{ r.detail }}</p>
   {% if r.code == 'similarity' %}
@@ -100,6 +106,7 @@
     <input id="m-{{ c.id }}" type="text" name="comment" placeholder="Comment shown to the student" value="{{ c.override.comment if c.override else '' }}">
     <button class="btn small {{ '' if c.needs_review and not c.override else 'ghost' }}" type="submit">{{ 'Override' if c.status not in ('manual', 'error') or c.override else 'Grade' }}</button>
   </form>
+  {% if pending %}<p class="hint">From the terminal: <code>markbook override {{ cli_path }} {{ sub.id }} -c {{ c.id }} -p &lt;0-{{ c.max_points|num }}&gt; -m "…"</code></p>{% endif %}
   </details>
 </section>
 {% endfor %}

@@ -1,22 +1,45 @@
-<!doctype html>
+{% from "_ui.html" import mark %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#FBFAF6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1523" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Markbook: grade Git repositories against a rubric, review only what needs a human.">
   <title>{% block title %}Markbook{% endblock %}</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="preload" href="{{ url_for('static', filename='fonts/Fraunces-Variable-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <script src="{{ url_for('static', filename='boot.js') }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='markbook.css') }}">
   <script src="{{ url_for('static', filename='markbook.js') }}" defer></script>
 </head>
 <body>
+  <div id="splash" class="splash" aria-hidden="true">
+    <div class="splash-inner">
+      {{ mark() }}
+      <span class="wordmark"><b>Mark</b><span>book</span></span>
+      <p class="tagline">Grade repositories. Review only what matters.</p>
+    </div>
+    <p class="skip-note">Click or press any key to skip</p>
+  </div>
+
   <a class="skip" href="#main">Skip to content</a>
   <header class="top">
     <div class="wrap top-inner">
-      <a class="brand" href="{{ url_for('index') }}"><span class="mark" aria-hidden="true"></span>Markbook</a>
+      <a class="brand" href="{{ url_for('index') }}" aria-label="Markbook, home">{{ mark() }}<span class="wordmark"><b>Mark</b><span>book</span></span></a>
       <nav aria-label="Primary">
         <label class="reviewer"><span class="sr">Reviewer name</span><input id="reviewer-name" type="text" placeholder="Reviewer" maxlength="60" autocomplete="name"></label>
         <a href="{{ url_for('index') }}">Runs</a>
         <a class="btn small" href="{{ url_for('new_run') }}">New run</a>
+        <button id="help-open" class="icon-btn" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.9 2.2c-.9.5-1.4 1-1.4 2"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
+        </button>
+        <button id="theme-toggle" class="icon-btn" type="button" aria-label="Dark mode" aria-pressed="false" title="Toggle dark mode">
+          <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z"/></svg>
+          <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
       </nav>
     </div>
   </header>
@@ -29,6 +52,23 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
-  <footer class="wrap foot">markbook {{ version }} · sandbox: {{ runtime }} · the same engine as the <code>markbook</code> CLI</footer>
+  <footer class="wrap foot">
+    <span class="wordmark"><b>Mark</b><span>book</span></span>
+    <span>v{{ version }}</span><span aria-hidden="true">·</span>
+    <span>sandbox: {{ runtime }}</span><span aria-hidden="true">·</span>
+    <span>the same engine as the <code>markbook</code> CLI</span>
+  </footer>
+
+  <dialog id="help" aria-labelledby="help-title">
+    <h2 id="help-title">Keyboard shortcuts</h2>
+    <dl>
+      <dt><kbd>j</kbd> / <kbd>k</kbd></dt><dd>next / previous submission</dd>
+      <dt><kbd>/</kbd></dt><dd>filter the list</dd>
+      <dt><kbd>?</kbd></dt><dd>this help</dd>
+      <dt><kbd>Esc</kbd></dt><dd>close dialogs</dd>
+    </dl>
+    <p class="hint">Resolving a submission jumps to the next one in the review queue.</p>
+    <button class="btn small" type="button" data-close>Close</button>
+  </dialog>
 </body>
 </html>

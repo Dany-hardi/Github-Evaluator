@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_ui.html" import mark %}
 {% block title %}{{ code }} · Markbook{% endblock %}
 {% block content %}
 <section class="card empty">
+  {{ mark() }}
   <h1>{{ code }}</h1>
-  <p>{{ message }}</p>
+  <p class="muted">{{ message }}</p>
   <a class="btn" href="{{ url_for('index') }}">Back to runs</a>
 </section>
 {% endblock %}

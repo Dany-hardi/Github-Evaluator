@@ -102,7 +102,7 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Referrer-Policy"] = "no-referrer"
         resp.headers["Content-Security-Policy"] = (
-            "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; "
+            "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; font-src 'self'; "
             "img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
         return resp
 
@@ -232,7 +232,7 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
             if s["score"]["scaled"] is not None:
                 bins[min(9, int(s["score"]["scaled"] / sc * 10))] += 1
         return render_template("run.html", run=run, run_id=run_id, subs=shown, flt=flt, bins=bins,
-                               peak=max(bins) or 1, queue=queue_ids(run), total=len(subs))
+                               peak=max(bins) or 1, queue=queue_ids(run), total=len(subs), cli_path=str(p))
 
     @app.get("/runs/<run_id>/status.json")
     def run_status(run_id):
@@ -259,7 +259,8 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
             prev_id, next_id = (ids[i - 1] if i else None), (ids[i + 1] if i + 1 < len(ids) else None)
         decisions = [d for d in load_overrides(p)["decisions"] if d["submission"] == sid]
         return render_template("submission.html", run=run, run_id=run_id, sub=sub, prev_id=prev_id,
-                               next_id=next_id, in_queue=sid in q, queue_left=len(q), decisions=decisions)
+                               next_id=next_id, in_queue=sid in q, queue_left=len(q), decisions=decisions,
+                               cli_path=str(p))
 
     @app.post("/runs/<run_id>/s/<sid>/view")
     def view_event(run_id, sid):

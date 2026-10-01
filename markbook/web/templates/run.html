@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import mark, ring, gbar %}
 {% block title %}{{ run.assignment.name }} · Markbook{% endblock %}
 {% block content %}
 {% set sm = run.summary %}{% set rl = sm.review_load %}{% set sc = run.assignment.scale %}
@@ -8,18 +9,32 @@
     <h1>{{ run.assignment.name }}</h1>
     <p class="muted">{{ sm.submissions }} submissions · graded out of {{ sc|num }}{% if run.assignment.pass_mark is not none %} · pass mark {{ run.assignment.pass_mark|num }}{% endif %} · sandbox <code>{{ run.assignment.sandbox.runtime }}</code></p>
   </div>
-  {% if queue %}<a class="btn" href="{{ url_for('submission_view', run_id=run_id, sid=queue[0]) }}">Start review · {{ queue|length }} left</a>{% endif %}
+  <div class="row">
+    <details class="menu">
+      <summary class="btn ghost small">Export ▾</summary>
+      <div class="menu-pop">
+        <p class="muted small">Generated live from the current state, including every override.</p>
+        <ul class="links">
+          <li><a href="{{ url_for('download', run_id=run_id, name='report.json') }}">report.json</a> <span class="muted small">schema-validated</span></li>
+          <li><a href="{{ url_for('download', run_id=run_id, name='grades.csv') }}">grades.csv</a> · <a href="{{ url_for('download', run_id=run_id, name='grades.csv', pending=1) }}">with provisional grades</a></li>
+          <li><a href="{{ url_for('download', run_id=run_id, name='grades.canvas.csv') }}">Canvas import</a> · <a href="{{ url_for('download', run_id=run_id, name='grades.moodle.csv') }}">Moodle import</a></li>
+          <li><a href="{{ url_for('download', run_id=run_id, name='junit.xml') }}">junit.xml</a> · <a href="{{ url_for('download', run_id=run_id, name='summary.md') }}">summary.md</a> · <a href="{{ url_for('download', run_id=run_id, name='feedback.zip') }}">feedback.zip</a></li>
+        </ul>
+      </div>
+    </details>
+    {% if queue %}<a class="btn" href="{{ url_for('submission_view', run_id=run_id, sid=queue[0]) }}">Start review · {{ queue|length }} left</a>{% endif %}
+  </div>
 </div>
 
 <section class="stats" aria-label="Run summary">
-  <div class="stat"><div class="stat-n">{{ rl.reduction_pct|num }}%</div><div class="stat-l">less manual review</div>
+  <div class="stat rise"><div class="stat-n">{{ rl.reduction_pct|num }}%</div><div class="stat-l">less manual review</div>{{ ring(rl.reduction_pct, label=False) }}
     <div class="stat-s">{{ rl.review_items }} items need a human instead of {{ rl.baseline_items }}</div></div>
-  <div class="stat"><div class="stat-n">{{ (sm.mean if sm.mean is not none else sm.provisional_mean)|num }}{% if sm.mean is none %}*{% endif %}</div>
+  <div class="stat hl rise d1"><div class="stat-n">{{ (sm.mean if sm.mean is not none else sm.provisional_mean)|num }}{% if sm.mean is none %}*{% endif %}</div>
     <div class="stat-l">mean grade</div>
     <div class="stat-s">{{ sm.complete }}/{{ sm.submissions }} complete{% if sm.mean is none %} · *provisional{% endif %}{% if sm.pass_rate is not none %} · {{ sm.pass_rate|pct }} pass{% endif %}</div></div>
-  <div class="stat"><div class="stat-n">{{ rl.fully_automatic_submissions }}</div><div class="stat-l">fully automatic</div>
+  <div class="stat rise d2"><div class="stat-n">{{ rl.fully_automatic_submissions }}</div><div class="stat-l">fully automatic</div>
     <div class="stat-s">no review needed</div></div>
-  <div class="stat"><div class="stat-n">{{ sm.late + sm.similarity_flags + sm.errors }}</div><div class="stat-l">flags raised automatically</div>
+  <div class="stat warn rise d3"><div class="stat-n">{{ sm.late + sm.similarity_flags + sm.errors }}</div><div class="stat-l">flags raised automatically</div>
     <div class="stat-s">{{ sm.late }} late · {{ sm.similarity_flags }} similar · {{ sm.errors }} unfetchable</div></div>
 </section>
 
@@ -29,7 +44,7 @@
     <svg viewBox="0 0 300 110" class="hist" role="img" aria-label="Histogram of grades in ten bands from 0 to {{ sc|num }}">
       {% for n in bins %}
         {% set h = (n / peak * 80)|round(1) %}
-        <rect x="{{ loop.index0 * 30 + 3 }}" y="{{ 90 - h }}" width="24" height="{{ h }}" rx="2" class="bar"><title>{{ (loop.index0 * sc / 10)|num }}–{{ ((loop.index0 + 1) * sc / 10)|num }}: {{ n }}</title></rect>
+        <rect x="{{ loop.index0 * 30 + 3 }}" y="{{ 90 - h }}" width="24" height="{{ h }}" rx="3" class="bar"><title>{{ (loop.index0 * sc / 10)|num }}–{{ ((loop.index0 + 1) * sc / 10)|num }}: {{ n }}</title></rect>
         {% if n %}<text x="{{ loop.index0 * 30 + 15 }}" y="{{ 86 - h }}" text-anchor="middle" class="bar-n">{{ n }}</text>{% endif %}
       {% endfor %}
       <line x1="0" x2="300" y1="90" y2="90" class="axis"/>
@@ -37,14 +52,10 @@
     </svg>
   </section>
   <section class="card">
-    <h2>Export</h2>
-    <p class="muted small">Generated live from the current state, including every override.</p>
-    <ul class="links">
-      <li><a href="{{ url_for('download', run_id=run_id, name='report.json') }}">report.json</a> <span class="muted small">schema-validated</span></li>
-      <li><a href="{{ url_for('download', run_id=run_id, name='grades.csv') }}">grades.csv</a> · <a href="{{ url_for('download', run_id=run_id, name='grades.csv', pending=1) }}">with provisional grades</a></li>
-      <li><a href="{{ url_for('download', run_id=run_id, name='grades.canvas.csv') }}">Canvas import</a> · <a href="{{ url_for('download', run_id=run_id, name='grades.moodle.csv') }}">Moodle import</a></li>
-      <li><a href="{{ url_for('download', run_id=run_id, name='junit.xml') }}">junit.xml</a> · <a href="{{ url_for('download', run_id=run_id, name='summary.md') }}">summary.md</a> · <a href="{{ url_for('download', run_id=run_id, name='feedback.zip') }}">feedback.zip</a></li>
-    </ul>
+    <h2>Same thing from the terminal</h2>
+    <p class="muted small">Every action in this page is a CLI command on the same run directory.</p>
+    <div class="cmd"><span class="prompt" aria-hidden="true">$</span><code>markbook review {{ cli_path }}</code><button type="button" data-copy="markbook review {{ cli_path }}">Copy</button></div>
+    <div class="cmd"><span class="prompt" aria-hidden="true">$</span><code>markbook stats {{ cli_path }}</code><button type="button" data-copy="markbook stats {{ cli_path }}">Copy</button></div>
   </section>
 </div>
 
@@ -54,19 +65,27 @@
     <a role="tab" href="?show=similarity" aria-selected="{{ 'true' if flt == 'similarity' else 'false' }}">Similarity <span class="count">{{ sm.similarity_flags }}</span></a>
     <a role="tab" href="?show=all" aria-selected="{{ 'true' if flt == 'all' else 'false' }}">All <span class="count">{{ total }}</span></a>
   </div>
+  {% if subs %}
+  <div class="toolbar">
+    <label class="sr" for="filter">Filter students</label>
+    <input id="filter" type="search" placeholder="Filter students  ( / )" autocomplete="off">
+    <span class="muted small">click a column to sort</span>
+  </div>
+  {% endif %}
   <div class="card flush">
   {% if not subs %}
     <p class="empty-row">{% if flt == 'review' %}✓ Nothing needs review.{% else %}Nothing to show.{% endif %}</p>
   {% else %}
-  <table class="table">
+  <table class="table" data-sortable>
     <caption class="sr">Submissions</caption>
-    <thead><tr><th scope="col">Student</th><th scope="col" class="num">Grade</th><th scope="col">Triage</th><th scope="col">Why</th></tr></thead>
+    <thead><tr><th scope="col" data-sort="text">Student</th><th scope="col" class="num" data-sort="num">Grade</th><th scope="col" data-sort="text">Triage</th><th scope="col">Why</th></tr></thead>
     <tbody>
     {% for s in subs %}
-      <tr>
+      {% set gp = (s.score.scaled / sc * 100) if (s.score.scaled is not none and sc) else 0 %}
+      <tr data-filter="{{ (s.name ~ ' ' ~ s.id)|lower }}">
         <th scope="row"><a href="{{ url_for('submission_view', run_id=run_id, sid=s.id) }}">{{ s.name }}</a><div class="muted mono small">{{ s.id }}</div></th>
-        <td class="num">
-          {% if s.status == 'error' %}—{% else %}<strong>{{ s.score.scaled|num }}</strong>{% if not s.score.complete %}<span class="muted" title="provisional: {{ s.score.pending_points|num }} pts pending review">*</span>{% endif %}<span class="muted small"> /{{ sc|num }}</span>{% endif %}
+        <td class="num" data-v="{{ s.score.scaled if s.score.scaled is not none else '' }}">
+          {% if s.status == 'error' %}—{% else %}<strong>{{ s.score.scaled|num }}</strong>{% if not s.score.complete %}<span class="muted" title="provisional: {{ s.score.pending_points|num }} pts pending review">*</span>{% endif %}<span class="muted small"> /{{ sc|num }}</span>{{ gbar(gp) }}{% endif %}
         </td>
         <td>{% if s.triage.state == 'review' %}<span class="badge review">Review</span>{% else %}<span class="badge auto">Auto</span>{% endif %}</td>
         <td>
@@ -79,6 +98,7 @@
   </table>
   {% endif %}
   </div>
+  <p id="filter-empty" class="empty-row" hidden>No students match that filter.</p>
 </section>
 
 {% if run.similarity %}
