@@ -20,8 +20,11 @@ jobs:
       - run: markbook doctor || true
       # Docker isolation tests need a small local image; pull one so they run instead of skipping.
       - run: docker pull busybox:latest
+      # Front-end interaction tests drive the real markbook.js in jsdom (skipped if Node/jsdom are missing).
+      - run: npm install --no-save --silent --prefix "$RUNNER_TEMP/jsdom" jsdom@24
       - run: pytest -q
         env:
+          NODE_PATH: ${{ runner.temp }}/jsdom/node_modules
           MARKBOOK_TEST_IMAGE: busybox:latest
           MARKBOOK_TEST_NETWORK: "1"   # `prepare` end-to-end with the real package index (pytest installed once, graded offline)
 
