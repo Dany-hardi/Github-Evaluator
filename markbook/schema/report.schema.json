@@ -133,6 +133,44 @@
                 "string",
                 "null"
               ]
+            },
+            "prepared": {
+              "type": "object",
+              "description": "Present when the spec had a `prepare` step: the dependency image student containers ran on, so a grade can be reproduced.",
+              "required": [
+                "tag",
+                "key",
+                "base_image",
+                "commands",
+                "files",
+                "cached"
+              ],
+              "properties": {
+                "tag": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "base_image": {
+                  "type": "string"
+                },
+                "commands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "files": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "cached": {
+                  "type": "boolean"
+                }
+              }
             }
           }
         },
@@ -158,6 +196,7 @@
                   "file_exists",
                   "command",
                   "cases",
+                  "junit",
                   "readme",
                   "git",
                   "manual"

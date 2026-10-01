@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import shlex
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .gitinfo import History
-from .sandbox import ExecResult, Sandbox
+from .sandbox import ExecResult, Sandbox, safe_relative
 
 MAX_EVIDENCE_CHARS = 600
 
@@ -175,6 +177,85 @@ def cases(opts: dict, ctx: Context) -> Outcome:
     return Outcome(frac, _status(frac), ev)
 
 
+# ── junit ─────────────────────────────────────────────────────────────────────
+
+MAX_REPORT_BYTES = 1 << 20
+MAX_FAILURES_SHOWN = 10
+
+
+def parse_junit(text: str) -> tuple[list[dict], str | None]:
+    """Parse JUnit XML into [{name, status: passed|failed|skipped, message}], or ([], error).
+
+    The report is influenced by student code, so it is parsed defensively: no DOCTYPE or entity
+    declarations (entity-expansion bombs) and a hard size limit applied before we get here.
+    """
+    if re.search(r"<!DOCTYPE|<!ENTITY", text, re.IGNORECASE):
+        return [], "the report declares a DOCTYPE/ENTITY, which is not valid JUnit output; refusing to parse it"
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as exc:
+        return [], f"the report is not valid XML ({exc})"
+    cases = []
+    for tc in root.iter("testcase"):
+        cls, name = tc.get("classname") or "", tc.get("name") or "?"
+        status, message = "passed", ""
+        for child in tc:
+            if child.tag in ("failure", "error"):
+                status, message = "failed", (child.get("message") or child.text or "").strip()
+            elif child.tag == "skipped" and status == "passed":
+                status = "skipped"
+        cases.append({"name": f"{cls}::{name}" if cls else name, "status": status, "message": message})
+    return cases, None
+
+
+def junit(opts: dict, ctx: Context) -> Outcome:
+    """Run a test command that writes a JUnit XML report and award points per passing test.
+
+    Works with pytest (`--junitxml`), Maven/Gradle surefire, ctest, Go (`gotestsum`), cargo-nextest...
+    Partial credit is passed / (passed + failed); skipped tests are reported but not counted.
+    A run that finds fewer than `min_tests` tests (default 1) FAILS: "no tests ran" must never
+    look like a clean pass, the same rule as "a crash can never pass".
+    """
+    assert ctx.sandbox is not None
+    report = str(opts.get("report", "report.xml"))
+    rel = safe_relative(report)
+    if rel is None:
+        return Outcome(0.0, "error", [Evidence("problem", f"unsafe report path {report!r}")],
+                       review="invalid report path in the spec")
+    # Remove any report that shipped in the repository: a student could commit a forged all-pass file
+    # and rely on the test command crashing before it writes a real one.
+    ctx.sandbox.exec(f"rm -f -- {shlex.quote(rel)}", timeout=15)
+    r = ctx.sandbox.exec(opts["run"], timeout=opts.get("timeout") or ctx.default_timeout)
+    ev = [Evidence("command", opts["run"])]
+    if r.timed_out:
+        return Outcome(0.0, "failed", [Evidence("problem", "timed out")] + ev + _describe(r))
+    text, err = ctx.sandbox.read_file(rel, MAX_REPORT_BYTES)
+    if err:
+        return Outcome(0.0, "failed", [Evidence("problem", f"no usable test report: {err}")] + ev + _describe(r))
+    cases, err = parse_junit(text)
+    if err:
+        return Outcome(0.0, "failed", [Evidence("problem", err)] + ev)
+
+    counted = [c for c in cases if c["status"] != "skipped"]
+    skipped = len(cases) - len(counted)
+    passed = sum(1 for c in counted if c["status"] == "passed")
+    need = int(opts.get("min_tests", 1))
+    if len(counted) < need:
+        return Outcome(0.0, "failed", [Evidence(
+            "problem", f"found {len(counted)} test(s), expected at least {need}: no tests ran, so nothing is earned")]
+            + ev + _describe(r))
+    frac = passed / len(counted) if counted else 1.0
+    out = [Evidence("summary", f"{passed}/{len(counted)} tests passed" + (f" ({skipped} skipped)" if skipped else ""))]
+    hidden = bool(opts.get("hidden"))
+    failed = [c for c in counted if c["status"] == "failed"]
+    for i, c in enumerate(failed[:MAX_FAILURES_SHOWN], 1):
+        out.append(Evidence(f"FAIL (hidden) test {i}", "failed") if hidden
+                   else Evidence(f"FAIL {c['name']}", clip(c["message"], 200)))
+    if len(failed) > MAX_FAILURES_SHOWN:
+        out.append(Evidence("note", f"…and {len(failed) - MAX_FAILURES_SHOWN} more failing test(s)"))
+    return Outcome(frac, _status(frac), out + ev)
+
+
 # ── readme ────────────────────────────────────────────────────────────────────
 
 def readme(opts: dict, ctx: Context) -> Outcome:
@@ -236,5 +317,5 @@ def manual(opts: dict, ctx: Context) -> Outcome:
                    review="manual criterion")
 
 
-REGISTRY = {"file_exists": file_exists, "command": command, "cases": cases,
+REGISTRY = {"file_exists": file_exists, "command": command, "cases": cases, "junit": junit,
             "readme": readme, "git": git, "manual": manual}

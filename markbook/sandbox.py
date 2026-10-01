@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -120,14 +121,32 @@ def _normalise_member(info: tarfile.TarInfo) -> tarfile.TarInfo:
     return info
 
 
+def safe_relative(path: str) -> str | None:
+    """Return a normalised relative path, or None if it is absolute, empty or escapes via `..`."""
+    p = Path(path)
+    if not path.strip() or p.is_absolute() or ".." in p.parts or "\x00" in path:
+        return None
+    return p.as_posix()
+
+
 class Sandbox:
     """Interface: load a source tree, run commands, clean up."""
 
     runtime = "abstract"
 
     def load(self, src_dir: Path) -> None: raise NotImplementedError
-    def exec(self, cmd: str, stdin: str | None = None, timeout: int | None = None) -> ExecResult:
+    def exec(self, cmd: str, stdin: str | None = None, timeout: int | None = None,
+             cap: int = OUTPUT_CAP) -> ExecResult:
         raise NotImplementedError
+
+    def read_file(self, path: str, max_bytes: int = 1 << 20) -> tuple[str | None, str | None]:
+        """Read one file the commands produced, from the working tree. Returns (text, error).
+
+        The path must be relative and stay inside the tree, and at most `max_bytes` are read:
+        the file's contents are influenced by student code, so they are treated as hostile input.
+        """
+        raise NotImplementedError
+
     def close(self) -> None: ...
 
     def __enter__(self): return self
@@ -145,13 +164,29 @@ class LocalSandbox(Sandbox):
     def load(self, src_dir: Path) -> None:
         shutil.copytree(src_dir, self.work, symlinks=True)
 
-    def exec(self, cmd: str, stdin: str | None = None, timeout: int | None = None) -> ExecResult:
+    def exec(self, cmd: str, stdin: str | None = None, timeout: int | None = None,
+             cap: int = OUTPUT_CAP) -> ExecResult:
         t = timeout or self.cfg.timeout
         wrapper = 'ulimit -t "$1"; ulimit -f 65536; exec sh -c "$2"'
         env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(self.work),
                "LANG": "C.UTF-8", "TMPDIR": str(self.work)}
         return run_capped(["sh", "-c", wrapper, "markbook", str(t + 2), cmd], stdin=stdin,
-                          timeout=t, cwd=str(self.work), env=env, new_session=True)
+                          timeout=t, cwd=str(self.work), env=env, new_session=True, cap=cap)
+
+    def read_file(self, path: str, max_bytes: int = 1 << 20) -> tuple[str | None, str | None]:
+        rel = safe_relative(path)
+        if rel is None:
+            return None, f"unsafe report path {path!r}: it must be relative and stay inside the project"
+        target = self.work / rel
+        # A symlink the student planted could point at any host file; refuse links outright.
+        if target.is_symlink() or not target.resolve().is_relative_to(self.work.resolve()):
+            return None, f"{rel} is a symlink or escapes the project; refusing to read it"
+        if not target.is_file():
+            return None, f"{rel} was not produced"
+        data = target.read_bytes()[: max_bytes + 1]
+        if len(data) > max_bytes:
+            return None, f"{rel} is larger than {max_bytes // 1024} KiB"
+        return data.decode("utf-8", errors="replace"), None
 
     def close(self) -> None:
         shutil.rmtree(self._tmp, ignore_errors=True)
@@ -290,16 +325,30 @@ class ContainerSandbox(Sandbox):
             raise SandboxUnavailable("failed to copy sources into the container (does the image have `tar`?): "
                                      + _decode(err)[:300])
 
-    def exec(self, cmd: str, stdin: str | None = None, timeout: int | None = None) -> ExecResult:
+    def exec(self, cmd: str, stdin: str | None = None, timeout: int | None = None,
+             cap: int = OUTPUT_CAP) -> ExecResult:
         t = timeout or self.cfg.timeout
         # `timeout -s KILL` runs inside the container so a runaway process is
         # really killed, not just abandoned by the container client.
         argv = [self.binary, "exec", "-i", "-w", "/work", self.name,
                 "timeout", "-s", "KILL", str(t), "sh", "-c", cmd]
-        res = run_capped(argv, stdin=stdin, timeout=t + 15)
+        res = run_capped(argv, stdin=stdin, timeout=t + 15, cap=cap)
         if res.exit_code == 137 and res.duration >= t - 0.2:
             res.timed_out, res.exit_code = True, None
         return res
+
+    def read_file(self, path: str, max_bytes: int = 1 << 20) -> tuple[str | None, str | None]:
+        rel = safe_relative(path)
+        if rel is None:
+            return None, f"unsafe report path {path!r}: it must be relative and stay inside the project"
+        # `head -c` bounds what leaves the container; a symlink inside the container can only reach
+        # the container's own filesystem, never a host path.
+        r = self.exec(f"head -c {max_bytes + 1} -- {shlex.quote(rel)}", timeout=30, cap=max_bytes + 2)
+        if r.timed_out or r.exit_code != 0:
+            return None, f"{rel} was not produced" + (f" ({r.stderr.strip()[:120]})" if r.stderr.strip() else "")
+        if len(r.stdout.encode("utf-8", errors="replace")) > max_bytes:
+            return None, f"{rel} is larger than {max_bytes // 1024} KiB"
+        return r.stdout, None
 
     def close(self) -> None:
         if self._started:
@@ -385,15 +434,19 @@ def _podman_status() -> tuple[bool, str]:
     return True, detail
 
 
+def image_present(binary: str, image: str) -> bool:
+    # Podman's `image exists` exits 0/1 by design (and 125 on error); Docker has no such command.
+    have = [binary, "image", "exists", image] if binary == "podman" else [binary, "image", "inspect", image]
+    return subprocess.run(have, capture_output=True).returncode == 0
+
+
 def ensure_image(image: str, log=None, binary: str = "docker") -> None:
     """Make sure `image` is present locally, pulling it once, before any submission starts.
 
     Without this, N parallel workers would each start a container and trigger N
     simultaneous pulls inside the grading window (and their timeouts).
     """
-    # Podman's `image exists` exits 0/1 by design (and 125 on error); Docker has no such command.
-    have = [binary, "image", "exists", image] if binary == "podman" else [binary, "image", "inspect", image]
-    if subprocess.run(have, capture_output=True).returncode == 0:
+    if image_present(binary, image):
         return
     if log:
         log(f"pulling {image} (first use)…")

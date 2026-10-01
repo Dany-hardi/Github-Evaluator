@@ -6,6 +6,7 @@ at `markbook validate`, not halfway through grading forty repositories.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,13 +14,17 @@ from typing import Any
 
 import yaml
 
-CHECK_TYPES = {"file_exists", "command", "cases", "readme", "git", "manual"}
+CHECK_TYPES = {"file_exists", "command", "cases", "junit", "readme", "git", "manual"}
+
+# Check types that execute student code and therefore need the sandbox.
+CODE_CHECKS = ("command", "cases", "junit")
 
 # Required keys per check type (beyond `type`).
 _REQUIRED: dict[str, tuple[str, ...]] = {
     "file_exists": ("paths",),
     "command": ("run",),
     "cases": ("run",),
+    "junit": ("run",),
     "readme": (),
     "git": (),
     "manual": (),
@@ -28,6 +33,7 @@ _ALLOWED: dict[str, set[str]] = {
     "file_exists": {"paths"},
     "command": {"run", "expect_exit", "stdout_contains", "stdin", "timeout"},
     "cases": {"run", "cases", "cases_file", "compare", "timeout"},
+    "junit": {"run", "report", "min_tests", "hidden", "timeout"},
     "readme": {"sections", "min_words", "forbid"},
     "git": {"min_commits", "min_active_days", "max_single_commit_share", "min_authors"},
     "manual": {"guidance", "ai"},
@@ -46,6 +52,14 @@ class SandboxSpec:
     cpus: float = 1.0
     pids: int = 128
     disk: str = "64m"          # size of the writable /work tmpfs
+
+
+@dataclass(frozen=True)
+class PrepareSpec:
+    """Cohort-level dependency step: runs ONCE, with network, using only teacher-authored commands and files."""
+    run: tuple[str, ...]
+    files: tuple[str, ...] = ()      # relative to the spec directory
+    timeout: int = 600
 
 
 @dataclass(frozen=True)
@@ -95,6 +109,8 @@ class Spec:
     source_dir: Path
     sha256: str
     borderline_margin: float = 0.0
+    prepare: PrepareSpec | None = None
+    prepared: dict | None = None     # filled in by prepare.ensure_prepared: the image actually used
 
     @property
     def max_points(self) -> float:
@@ -102,7 +118,7 @@ class Spec:
 
     @property
     def needs_sandbox(self) -> bool:
-        return any(c.type in ("command", "cases") for c in self.criteria)
+        return any(c.type in CODE_CHECKS for c in self.criteria)
 
 
 def _parse_deadline(value: Any, errors: list[str]) -> datetime | None:
@@ -137,6 +153,50 @@ def _load_cases_file(base: Path, rel: str, errors: list[str], where: str) -> lis
         errors.append(f"{where}: cases_file must contain a list of cases")
         return []
     return data
+
+
+_IMAGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$")
+MAX_PREPARE_FILE = 1 << 20
+
+
+def _parse_prepare(raw, base: Path, errors: list[str], confine: bool) -> PrepareSpec | None:
+    """`prepare:` runs with network access, so it is only accepted from a trusted spec."""
+    if confine:
+        errors.append("prepare: not allowed in uploaded specs, because it runs commands with network access; "
+                      "put the spec in a saved-specs directory (`serve --specs DIR`) or use the CLI")
+        return None
+    if not isinstance(raw, dict):
+        errors.append("prepare: must be a mapping with `run` (and optionally `files`, `timeout`)")
+        return None
+    bad = set(raw) - {"run", "files", "timeout"}
+    if bad:
+        errors.append(f"prepare: unknown option(s) {sorted(bad)}")
+    run = raw.get("run")
+    run = [run] if isinstance(run, str) else run
+    if not isinstance(run, list) or not run or not all(isinstance(c, str) and c.strip() for c in run):
+        errors.append("prepare.run: a command or a non-empty list of commands is required")
+        run = []
+    files = raw.get("files") or []
+    if not isinstance(files, list):
+        errors.append("prepare.files: must be a list of paths next to the spec")
+        files = []
+    ok_files = []
+    for f in files:
+        p = (base / str(f))
+        rel = Path(str(f))
+        if rel.is_absolute() or ".." in rel.parts or not str(f).strip():
+            errors.append(f"prepare.files: {f!r} must be a relative path inside the spec directory")
+        elif p.is_symlink() or not p.is_file():
+            errors.append(f"prepare.files: {f!r} is not a regular file next to the spec")
+        elif p.stat().st_size > MAX_PREPARE_FILE:
+            errors.append(f"prepare.files: {f!r} is larger than {MAX_PREPARE_FILE // 1024} KiB")
+        else:
+            ok_files.append(rel.as_posix())
+    timeout = raw.get("timeout", 600)
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+        errors.append("prepare.timeout: must be a positive number of seconds")
+        timeout = 600
+    return PrepareSpec(tuple(run), tuple(ok_files), timeout) if run else None
 
 
 def load_spec(path: str | Path, *, confine: bool = False) -> Spec:
@@ -191,6 +251,13 @@ def load_spec(path: str | Path, *, confine: bool = False) -> Spec:
         pids=int(sb_raw.get("pids", 128)),
         disk=str(sb_raw.get("disk", "64m")),
     )
+
+    if sandbox.image is not None and not _IMAGE_RE.match(str(sandbox.image)):
+        errors.append(f"sandbox.image: {sandbox.image!r} is not a valid image reference")
+
+    prepare = None
+    if doc.get("prepare") is not None:
+        prepare = _parse_prepare(doc["prepare"], base, errors, confine)
 
     sim_raw = doc.get("similarity") or {}
     similarity = SimilaritySpec(
@@ -263,6 +330,13 @@ def load_spec(path: str | Path, *, confine: bool = False) -> Spec:
             check.pop("cases_file", None)
             if check.get("compare", "trim") not in ("trim", "exact", "tokens"):
                 errors.append(f"{where}: compare must be trim, exact or tokens")
+        if ctype == "junit":
+            from .sandbox import safe_relative
+            if safe_relative(str(check.get("report", "report.xml"))) is None:
+                errors.append(f"{where}: report must be a relative path inside the project (no '..')")
+            mt = check.get("min_tests", 1)
+            if not isinstance(mt, int) or isinstance(mt, bool) or mt < 0:
+                errors.append(f"{where}: min_tests must be a non-negative integer")
         if ctype == "file_exists" and not isinstance(check.get("paths"), list):
             errors.append(f"{where}: paths must be a list of globs")
         requires = tuple(c.get("requires") or ())
@@ -272,8 +346,11 @@ def load_spec(path: str | Path, *, confine: bool = False) -> Spec:
         seen.add(cid)
         criteria.append(Criterion(cid, str(c.get("title") or cid), float(points), check, requires))
 
-    if any(c.type in ("command", "cases") for c in criteria) and not sandbox.image:
+    if any(c.type in CODE_CHECKS for c in criteria) and not sandbox.image:
         errors.append("sandbox.image: required when any criterion runs code (e.g. python:3.12-slim)")
+
+    if prepare is not None and not any(c.type in CODE_CHECKS for c in criteria):
+        errors.append("prepare: has no effect because no criterion runs code (command, cases or junit)")
 
     if errors:
         raise SpecError("\n".join(f"  - {e}" for e in errors))
@@ -295,4 +372,5 @@ def load_spec(path: str | Path, *, confine: bool = False) -> Spec:
         sha256=hashlib.sha256(raw_text.encode()).hexdigest(),
         borderline_margin=round(float(doc.get("borderline_margin", 0.02 * scale)), 4)
         if pass_mark is not None else 0.0,
+        prepare=prepare,
     )

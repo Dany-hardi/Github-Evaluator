@@ -150,11 +150,50 @@ criteria:
 | `file_exists` | `paths`: list of globs (matched against the full path and the file name) | fraction of globs matched |
 | `command` | `run`, `expect_exit` (default 0), `stdout_contains`, `stdin`, `timeout` | all or nothing |
 | `cases` | `run`, `cases` / `cases_file`, `compare`, `timeout` | fraction of cases passed |
+| `junit` | `run`, `report` (default `report.xml`), `min_tests` (default 1), `hidden`, `timeout` | fraction of tests passed (per-test credit) |
 | `readme` | `sections` (matched against headings), `min_words`, `forbid` (regexes) | fraction of conditions met |
 | `git` | `min_commits`, `min_active_days`, `min_authors`, `max_single_commit_share` | fraction of conditions met |
 | `manual` | `guidance` | nothing until a human grades it; always routed to review |
 
 A **case** has `name`, `args`, `stdin`, and any of `stdout`, `stdout_regex`, `exit`. Unless a case sets `exit`, **exit code 0 is required**, so a crashing program can't earn a case by printing nothing. A case with `hidden: true` never reveals its expected output in feedback.
+
+**`junit`: real test suites.** Run your test command so that it writes a JUnit XML report, and points are awarded per passing test. This works with anything that emits JUnit XML: `pytest --junitxml=report.xml`, Maven/Gradle surefire, `ctest --output-junit`, `gotestsum`, `cargo nextest`.
+
+```yaml
+- id: tests
+  title: Unit tests
+  points: 10
+  check: {type: junit, run: "python -m pytest -q -p no:cacheprovider --junitxml=report.xml", min_tests: 5, hidden: true}
+```
+
+Credit is `passed / (passed + failed)`; skipped tests are reported but not counted. **A run that finds fewer than `min_tests` tests earns nothing**, because "no tests ran" must never look like a clean pass (the same rule as "a crash can never pass"). A report that is missing, malformed, over 1 MiB or that declares a DOCTYPE/ENTITY is a failure with the runner's output as evidence. Any `report.xml` already in the student's repository is deleted before the run, so a committed all-pass report is ignored. `hidden: true` shows failures without test names or messages.
+
+> **Trust limit.** The test runner imports the student's code in the same process, so a determined student can forge the report from inside their own code. `cases` does not have this weakness, because the program is a black box. For high-stakes grading, prefer `cases` with hidden, varied inputs, or run the teacher's tests via `overlay` and treat `junit` as a convenience.
+
+### Dependencies: `prepare`
+
+The sandbox has no network, so an assignment that needs `pytest`, `requests`, a Maven cache or `npm ci` needs its dependencies installed another way. `prepare` does that **once per cohort, with network, using only your commands and files**, and bakes the result into a cached image:
+
+```yaml
+sandbox: {image: python:3.12-slim}
+prepare:
+  files: [requirements.txt]                 # next to the spec; copied into the build
+  run: ["pip install --no-cache-dir -r requirements.txt"]
+  timeout: 600
+```
+
+```console
+$ markbook prepare spec.yaml      # optional: build ahead of time
+✓ markbook-prepared:32a0b76f8a4e9f22  (built)
+$ markbook grade spec.yaml --roster roster.csv     # first run builds if needed; later runs reuse the cache
+```
+
+- Student containers then start from that image **exactly as before**: no network, non-root, capabilities dropped, no host mounts. Student code never has network access.
+- **Why not install each student's own `requirements.txt`?** `pip install` and `npm install` execute student-controlled build scripts. That would give strangers' code network access from the grading machine: exfiltration, and a route to whatever that machine can reach. So a student's own requirements file is deliberately **not** installed; the dependencies are the ones you chose, which also makes grading repeatable and fair.
+- The image is keyed on the base image ID, the commands and the content of every `prepare.files` entry, and rebuilt only when one changes. The report records the image, key, commands and file digests (`assignment.sandbox.prepared`).
+- Needs Docker or Podman. With `--sandbox none` nothing can be built, so grading stops with exit code 3 and an explanation. A failing build also stops with exit code 3 (pip's own error is in the message) before any student is graded.
+- `prepare` is refused in specs uploaded through the web UI, because it runs commands with network access; use a saved spec (`serve --specs DIR`) or the CLI.
+- Prepared images are labelled `markbook=prepared`; remove old ones with `docker image prune --filter label=markbook=prepared -a`.
 
 ## Roster
 
@@ -196,6 +235,7 @@ markbook review RUN [--all] [--json]
 markbook show RUN STUDENT
 markbook override RUN STUDENT [-c CRITERION (-p POINTS | --accept-suggestion)] [--waive-late] [--clear similarity|borderline] [-m COMMENT]
 markbook retry RUN [--sandbox docker|podman|none] [--jobs N]
+markbook prepare SPEC [--sandbox docker|podman] [--force]
 markbook enqueue SPEC --roster CSV --queue DIR [--sandbox docker|podman|none]
 markbook worker DIR [--jobs N] [--lease-seconds S] [--idle-exit]
 markbook queue-status DIR [--json]
@@ -426,6 +466,8 @@ Student code is untrusted. Treat the grader as a system that runs arbitrary code
 
 **No silent fallback.** If you ask for Docker or Podman and it isn't usable, grading stops with exit code 3 and an explanation. `--sandbox none` exists for environments that are *already* isolated, prints a warning, and only applies `ulimit` CPU-time and file-size limits plus a scrubbed environment. It is **not** a sandbox.
 
+**Network for dependencies.** The only step that ever has network access is `prepare`, which runs your commands (never a student's) once per cohort. Student containers always run with `--network none`. See [Dependencies: `prepare`](#dependencies-prepare).
+
 **Other protections:**
 - Git history, similarity fingerprints and the README are read from the clone *before* any student code runs.
 - The sandbox image is pulled once, up front, not by N parallel workers mid-grading. `markbook doctor --clean` removes containers orphaned by a killed run.
@@ -441,7 +483,7 @@ Student code is untrusted. Treat the grader as a system that runs arbitrary code
 Known and deliberate; please don't discover them in production:
 
 - **Podman is CI-verified only**, rootless Podman needs cgroup v2 with the `memory`, `cpu` and `pids` controllers delegated to your user (otherwise grading stops with a message), and image names must be fully qualified (`docker.io/library/python:3.12-slim`).
-- **No network inside the sandbox**, so builds that download dependencies (`pip install`, `npm install`, Maven) fail. Vendor dependencies, or use an image that has them pre-installed.
+- **No network inside the student sandbox**, by design. Dependencies come from the teacher's `prepare` step, so a student's own `requirements.txt`/`package.json` is not installed, and an assignment whose dependencies cannot be installed at build time (for instance ones that download data at run time) will fail. Queue workers each build their own prepared image, and a queue run's report does not yet record the prepared-image key.
 - **Commit timestamps are author-controlled.** Lateness is measured from the last commit's time, which a student can set arbitrarily. For high-stakes deadlines, run [`markbook pin`](#pinning-submissions-at-the-deadline) when the deadline passes and grade the pinned roster (`pin --at deadline` is only a best-effort fallback, because it also trusts timestamps).
 - **Similarity is token-based.** It catches renamed variables and reworded comments. It does not catch semantically rewritten code, and short assignments produce short fingerprints (below `min_fingerprints` nothing is flagged). It understands C-family languages (C, C++, Java, JavaScript/TypeScript, Go, Rust, C#, Kotlin, Swift), Python, Ruby and shell.
 - **Rubric checks are mechanical.** README and history checks measure structure, not quality. That is what `manual` criteria are for.

@@ -23,6 +23,7 @@ jobs:
       - run: pytest -q
         env:
           MARKBOOK_TEST_IMAGE: busybox:latest
+          MARKBOOK_TEST_NETWORK: "1"   # `prepare` end-to-end with the real package index (pytest installed once, graded offline)
 
   # Podman support is verified ONLY here: no developer machine of this project has Podman.
   # Runs the same real-runtime isolation tests as Docker, against rootless Podman on the runner.
@@ -31,6 +32,7 @@ jobs:
     env:
       MARKBOOK_TEST_PODMAN_IMAGE: docker.io/library/busybox:latest
       MARKBOOK_TEST_PODMAN_PY_IMAGE: docker.io/library/python:3.12-slim
+      MARKBOOK_TEST_NETWORK: "1"          # also exercises `podman build` for the prepare step
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -69,6 +71,14 @@ jobs:
             echo "::error::Podman tests were skipped, so Podman was NOT verified"; exit 1
           fi
           grep -cE '\[podman\].*PASSED' podman-tests.log
+      - name: Prepare (podman build) and junit under Podman (verbose; skips are failures here)
+        run: |
+          set -o pipefail
+          pytest -v -rs tests/test_prepare.py -k "podman" 2>&1 | tee podman-prepare.log
+          if grep -E '\[podman\].*SKIPPED' podman-prepare.log; then
+            echo "::error::Podman prepare tests were skipped, so `podman build` was NOT verified"; exit 1
+          fi
+          test "$(grep -cE '\[podman\].*PASSED' podman-prepare.log)" -ge 3
       - name: Full suite
         run: pytest -q
       - name: Leaked containers (must be empty)

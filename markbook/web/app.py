@@ -176,7 +176,7 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
                 return fail("Provide a roster CSV (id,name,email,repo).")
             if len(entries) > MAX_ROSTER_ROWS:
                 return fail(f"Roster too large (max {MAX_ROSTER_ROWS} rows).")
-            preflight(spec, runtime)
+            preflight(spec, runtime, build=False)   # the (slow) prepare build runs in the grading thread
         except (SpecError, RosterError) as exc:
             return fail(str(exc))
         except SandboxUnavailable as exc:
