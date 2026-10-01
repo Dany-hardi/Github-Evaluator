@@ -34,7 +34,7 @@ FizzBuzz CLI (demo)  (grades out of 20; * = pending manual review)
 - [Writing a spec](#writing-a-spec) · [Roster](#roster)
 - [CLI reference](#cli-reference) · [Exit codes](#exit-codes)
 - [Reports & LMS integration](#reports--lms-integration) · [Use in CI](#use-in-ci)
-- [Review workflow](#review-workflow) · [Retrying failures](#retrying-failures) · [AI reviewer assist](#ai-reviewer-assist-optional) · [Web UI](#web-ui)
+- [Review workflow](#review-workflow) · [Retrying failures](#retrying-failures) · [Scaling out](#scaling-out-with-a-job-queue) · [AI reviewer assist](#ai-reviewer-assist-optional) · [Web UI](#web-ui)
 - [Security model](#security-model) · [Limitations](#limitations)
 - [Development](#development) · [More docs](#more-docs)
 
@@ -196,6 +196,10 @@ markbook review RUN [--all] [--json]
 markbook show RUN STUDENT
 markbook override RUN STUDENT [-c CRITERION (-p POINTS | --accept-suggestion)] [--waive-late] [--clear similarity|borderline] [-m COMMENT]
 markbook retry RUN [--sandbox docker|podman|none] [--jobs N]
+markbook enqueue SPEC --roster CSV --queue DIR [--sandbox docker|podman|none]
+markbook worker DIR [--jobs N] [--lease-seconds S] [--idle-exit]
+markbook queue-status DIR [--json]
+markbook collect DIR [--out RUNDIR] [--lms canvas|moodle ...] [--partial]
 markbook runs [--dir DIR] [--json]
 markbook stats RUN [--idle-minutes N] [--baseline CSV] [--json]
 markbook report RUN [--lms canvas|moodle ...] [--include-pending] [--out DIR]
@@ -329,6 +333,34 @@ retrying 2 submission(s): ghost, frank
 
 Only the failed submissions are re-graded; everything else stays byte-for-byte as it was, and similarity is recomputed across the whole cohort from fingerprints stored with the run. `retry` refuses if the spec's hash has changed since the run (re-grading part of a cohort against a different rubric would make grades incomparable). `markbook runs` lists runs with how many items in each still need review.
 
+## Scaling out with a job queue
+
+For cohorts too big for one machine, grading can be split across several processes or machines through a **queue directory**: plain files on a filesystem all workers can reach (an NFS export, a mounted volume, or just a local directory for several processes). No database, broker or network service.
+
+```bash
+markbook enqueue spec.yaml --roster roster.csv --queue /shared/q1 --sandbox docker
+markbook worker /shared/q1 --jobs 4          # on each grading machine; add --idle-exit to stop when the queue drains
+markbook queue-status /shared/q1             # pending / claimed / done / failed, workers, stale leases
+markbook collect /shared/q1 --lms canvas     # when everything is done; same reports as `markbook grade`
+```
+
+How it works:
+
+- `enqueue` freezes a copy of the spec (plus the spec's whole directory, only if it uses `overlay`, `starter` or `cases_file`), records its sha256 and a hash of those files in `meta.json`, and writes one job file per submission into `pending/`. Job files hold roster fields only. **Tokens are never written to the queue**: each worker uses its own `GITHUB_TOKEN`/`--token-env`.
+- A worker claims a job with an atomic `os.rename` from `pending/` into `claimed/<worker>/`; whoever wins the rename owns it. It grades with the same `grade_submission` as `markbook grade`, publishes `done/<id>.json` (record plus similarity fingerprints) and drops its claim. It refuses to start if the frozen spec or its files no longer match the recorded hashes.
+- While it works, a worker refreshes a heartbeat. If a worker dies (crash, `kill -9`, lost machine), any other worker returns its claimed jobs to `pending/` once the lease (`--lease-seconds`, default 300, plus a margin of 25% capped at 30 s) has expired. A job whose workers are lost 3 times becomes an error record (`worker_lost`) instead of looping forever.
+- Results are **exactly once**: a result is published with a hard link that fails if one exists, so a late result from a worker presumed dead is discarded and never overwrites or duplicates a finished one.
+- A job that raises becomes a normal `status: error` submission, never a lost job. A job file that cannot be read is moved to `failed/` and shows up as `not_graded` at collect time.
+- `SIGINT`/`SIGTERM` makes a worker stop claiming; it finishes the job(s) in hand (bounded by their timeouts; containers are removed as usual) and exits 0. For queues created with `--sandbox docker`, a worker checks Docker and pulls the image once at start-up (exit 3 if Docker is unusable).
+- `collect` builds the run with the same `assemble_run` in roster order and saves it like `grade` does (run.json, fingerprints, reports, `inputs`). It refuses while jobs are unfinished; `--partial` collects anyway and marks every missing submission as an error with code `not_graded` (never a silent zero). The test suite checks that the demo cohort graded locally and through the queue (3 competing worker processes) gives identical scores, statuses, triage and similarity.
+
+Security and honesty:
+
+- **The queue directory is a trust boundary.** Anyone who can write to it can make workers clone and run arbitrary repository URLs (through the sandbox, or on the bare host with `--sandbox none`) and can forge results. Keep it private to the grading team, and only run workers on machines you trust. Do not put it on a share that students or other courses can write to.
+- **Verified here:** several worker *processes* on one Linux machine, including competing claims, `kill -9` recovery, graceful `SIGTERM` and equivalence with local grading. **Multi-machine operation was not verified.** Rename is atomic on local filesystems, and is expected to be on NFS for renames inside one export, but NFS retransmits and exotic or eventually consistent shared filesystems (some FUSE and object-store mounts) are untested; do not rely on them.
+- **Clock skew matters.** Liveness is judged from heartbeat file modification times against each machine's clock. Keep clocks in sync (NTP), and keep `--lease-seconds` comfortably above any expected skew plus the heartbeat interval (lease/4). Too short a lease only wastes work (the duplicate result is discarded); it cannot corrupt a run.
+- POSIX only, like the rest of Markbook. There is no authentication or encryption: that is the filesystem's job.
+
 ## AI reviewer assist (optional)
 
 For `manual` criteria you can ask Claude for an *advisory* score and rationale, to speed up the human, never to replace them.
@@ -414,6 +446,7 @@ Known and deliberate; please don't discover them in production:
 - **Similarity is token-based.** It catches renamed variables and reworded comments. It does not catch semantically rewritten code, and short assignments produce short fingerprints (below `min_fingerprints` nothing is flagged). It understands C-family languages (C, C++, Java, JavaScript/TypeScript, Go, Rust, C#, Kotlin, Swift), Python, Ruby and shell.
 - **Rubric checks are mechanical.** README and history checks measure structure, not quality. That is what `manual` criteria are for.
 - **AI is advisory only** and has not been run against the live API (see above). No grade ever depends on a model: there is no automatic AI scoring.
+- **Scale:** `markbook grade` is thread-per-submission on one machine; to use several machines or processes see [Scaling out with a job queue](#scaling-out-with-a-job-queue) (multi-machine use is unverified).
 - **POSIX only.** Linux and macOS (and WSL on Windows). Native Windows is not supported: the sandbox maps your uid into the container and the overrides lock uses `fcntl`.
 - **Clones are shallow unless the rubric has a `git` check**, so history numbers (`commits`, `active_days`…) are `null` in the report for such runs. Lateness only needs the tip commit.
 - **GitHub only for token support**; other hosts work for public https URLs without authentication.
