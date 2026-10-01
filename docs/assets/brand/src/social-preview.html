@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="common.css"><style>
+body { width: 1280px; height: 640px; background: #0B1523; color: #F4F1E8; position: relative; overflow: hidden;
+  background-image: radial-gradient(900px 600px at 18% 30%, #16355a 0%, transparent 62%), repeating-linear-gradient(to bottom, transparent 0 39px, rgba(244,241,232,.045) 39px 40px); }
+body::before { content: ""; position: absolute; left: 96px; top: 0; bottom: 0; width: 2px; background: rgba(229,72,77,.5); }
+.left { position: absolute; left: 140px; top: 84px; width: 640px; }
+.brandrow { display: flex; align-items: center; gap: 24px; } .brandrow svg { width: 88px; height: 130px; flex: none; }
+.wm { font-size: 104px; white-space: nowrap; } .tag { margin-top: 30px; font-size: 34px; line-height: 1.25; color: #C9D4E5; font-weight: 500; max-width: 520px; }
+.tag em { font-style: normal; background: linear-gradient(transparent 60%, rgba(255,212,59,.9) 60% 92%, transparent 92%); color: #F4F1E8; padding: 0 4px; margin: 0 -4px; }
+.chips { margin-top: 34px; display: flex; gap: 12px; } .chips span { font-size: 19px; font-weight: 650; color: #A9B8CE; border: 1.5px solid #31476B; border-radius: 999px; padding: 6px 16px; }
+.term { position: absolute; right: 52px; top: 214px; width: 440px; background: #070F1B; border: 1px solid #223350; border-radius: 18px; box-shadow: 0 30px 70px -20px rgba(0,0,0,.7); transform: rotate(1.6deg); overflow: hidden; }
+.bar { height: 36px; background: #0E1A2D; display: flex; align-items: center; gap: 8px; padding: 0 14px; } .bar i { width: 11px; height: 11px; border-radius: 50%; background: #31476B; display: block; }
+pre { font: 14.5px/1.62 ui-monospace, "DejaVu Sans Mono", Menlo, monospace; padding: 18px 20px 22px; color: #D7E0EE; white-space: pre; }
+.g { color: #2FD08F; } .y { color: #FFD43B; } .d { color: #7F93B2; } .r { color: #F2A33A; }
+</style>
+<div class="left"><div class="brandrow"><svg class="mark" viewBox="13 5 38 56"><path class="bm" d="M19 13a4 4 0 0 1 4-4h18a4 4 0 0 1 4 4v43l-13-10-13 10z"/><path class="hl" d="M21.5 27.2l20.4-2.6.9 6.6-20.4 2.6z"/><path class="tk" d="M25.6 30.4l5.2 5.2 8.6-11.4"/></svg><div class="wm"><b>Mark</b><span>book</span></div></div>
+<p class="tag">Grade repositories. <em>Review</em> only what matters.</p>
+<div class="chips"><span>CLI-first</span><span>Sandboxed</span><span>Audited</span></div></div>
+<div class="term"><div class="bar"><i></i><i></i><i></i></div><pre><span class="d">$</span> <span class="g">markbook</span> grade spec.yaml --roster roster.csv
+
+  alice    <span class="y">17*</span>  <span class="r">review</span>  quality
+  bob      <span class="y">17*</span>  <span class="r">review</span>  quality, similarity
+  carol    <span class="y">17*</span>  <span class="r">review</span>  quality, similarity
+  dave   <span class="y">8.08*</span>  <span class="r">review</span>  quality
+  erin   <span class="y">13.6*</span>  <span class="r">review</span>  quality, late -20%
+  ghost     -  <span class="r">review</span>  fetch_failed
+
+  <span class="g">Review load:</span> 9 items need a human
+  vs 42 if checked by hand  <span class="g">-> 78.6% less</span></pre></div>

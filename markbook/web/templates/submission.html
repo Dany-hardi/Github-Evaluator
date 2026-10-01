@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_ui.html" import mark, ring %}
-{% block title %}{{ sub.name }} · {{ run.assignment.name }}{% endblock %}
+{% block title %}{{ sub.name }} · {{ run.assignment.name }} · Markbook{% endblock %}
 {% block content %}
 {% set sc = run.assignment.scale %}
 <span id="view-beacon" data-url="{{ url_for('view_event', run_id=run_id, sid=sub.id) }}" hidden></span>
