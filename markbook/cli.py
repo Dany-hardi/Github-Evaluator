@@ -6,6 +6,7 @@ Exit codes (stable, for scripts and CI):
   2  usage error (argparse)
   3  sandbox unavailable (Docker missing/unreachable and --sandbox docker requested)
   4  success, but some submissions need human review (only with --fail-on-review)
+(queue commands use the same codes; `collect` exits 1 while jobs are unfinished and --partial is not given)
 """
 from __future__ import annotations
 
@@ -24,7 +25,8 @@ from pathlib import Path
 
 from . import SCHEMA_VERSION, __version__
 from .ai import AiUnavailable, DEFAULT_MODEL, Reviewer
-from .grader import grade_cohort
+from .grader import assemble_run, grade_cohort
+from . import queue as jobqueue
 from .roster import Entry, RosterError, load_roster, safe_id
 from .report import write_reports
 from .retry import failed_ids, retry_failed
@@ -182,6 +184,80 @@ def cmd_grade(args) -> int:
             print(f"  {bold('Next:')} markbook review {out}")
     needs = any(s["triage"]["state"] == "review" for s in run["submissions"])
     return EXIT_REVIEW if (args.fail_on_review and needs) else 0
+
+
+def cmd_enqueue(args) -> int:
+    entries = load_roster(args.roster)
+    run_id = _new_run_id()
+    try:
+        q = jobqueue.enqueue(args.spec, entries, args.queue, args.sandbox, allow_local=not args.no_allow_local,
+                             run_id=run_id)
+    except jobqueue.QueueError as exc:
+        raise CliError(str(exc)) from exc
+    print(f"{green('✓')} queued {len(entries)} job(s) in {q.root}  {dim('(run ' + run_id + ', sandbox ' + args.sandbox + ')')}")
+    print(dim(f"  next: markbook worker {q.root}   (on each machine)   then   markbook collect {q.root}"))
+    return 0
+
+
+def cmd_worker(args) -> int:
+    try:
+        q = jobqueue.Queue(args.queue)
+        w = jobqueue.Worker(q, jobs=args.jobs, lease_seconds=args.lease_seconds, idle_exit=args.idle_exit,
+                            token=_token(args.token_env), poll=args.poll,
+                            log=lambda m: print(dim(f"[{datetime.now():%H:%M:%S}] {m}"), file=sys.stderr))
+        if q.meta["runtime"] == "none":
+            print(yellow("⚠ queue was created with --sandbox none: student code runs directly on this machine."),
+                  file=sys.stderr)
+        w.log(f"worker {w.id} started (lease {args.lease_seconds:g}s, jobs {args.jobs})")
+        w.run()
+    except jobqueue.QueueError as exc:
+        raise CliError(str(exc)) from exc
+    print(f"worker {w.id} exiting: graded {w.graded}, discarded {w.discarded} duplicate(s)", file=sys.stderr)
+    return 0
+
+
+def cmd_queue_status(args) -> int:
+    try:
+        st = jobqueue.Queue(args.queue).status()
+    except jobqueue.QueueError as exc:
+        raise CliError(str(exc)) from exc
+    if args.json:
+        print(json.dumps(st, indent=2))
+        return 0
+    print(f"{bold('Queue')} {args.queue}  {dim('run ' + st['run_id'])}")
+    print(f"  pending {st['pending']}  claimed {st['claimed']}  done {st['done']}  failed {st['failed']}  "
+          f"/ total {st['total']}" + ("  " + green("complete") if st["complete"] else ""))
+    for w in st["workers"]:
+        age = "no heartbeat" if w["heartbeat_age_s"] is None else f"heartbeat {w['heartbeat_age_s']:g}s ago"
+        flag = red(" STALE") if w["stale"] else ""
+        print(f"  worker {w['worker']}: {len(w['claimed'])} claimed ({', '.join(w['claimed']) or '-'}), {age}{flag}")
+    for s in st["stale_leases"]:
+        print(yellow(f"  ! stale lease: {s['worker']} holds {', '.join(s['jobs'])}; "
+                     "any running worker will return them to pending"))
+    return 0
+
+
+def cmd_collect(args) -> int:
+    try:
+        spec, meta, subs, corpora, missing = jobqueue.collect(args.queue, partial=args.partial)
+    except jobqueue.QueueError as exc:
+        raise CliError(str(exc)) from exc
+    qpath = Path(args.queue)
+    run = assemble_run(spec, meta["runtime"], subs, corpora, run_id=meta["run_id"], created=meta["created_at"],
+                       inputs={"spec_path": str((qpath / "spec" / meta["spec_file"]).resolve()),
+                               "allow_local": bool(meta.get("allow_local")), "queue": str(qpath.resolve())})
+    out = Path(args.out) if args.out else DEFAULT_RUNS / meta["run_id"]
+    save_run(out, run)
+    save_corpora(out, corpora)
+    run = current(out)
+    write_reports(run, out, lms=args.lms, include_pending=args.include_pending)
+    print(render_table(run))
+    if missing:
+        print(yellow(f"\n  ⚠ PARTIAL: {len(missing)} submission(s) not graded yet ({', '.join(missing[:8])}"
+                     f"{'…' if len(missing) > 8 else ''}); they appear as errors with code not_graded."),
+              file=sys.stderr)
+    print(f"\n  {bold('Reports:')} {out}/")
+    return 0
 
 
 def cmd_runs(args) -> int:
@@ -558,6 +634,30 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("run")
     sp.add_argument("--sandbox", choices=["docker", "none"], default="docker")
     sp.add_argument("--jobs", type=int, default=4); sp.add_argument("--token-env")
+
+    sp = add("enqueue", cmd_enqueue, "create a job queue directory for distributed grading (see `worker`, `collect`)")
+    sp.add_argument("spec"); sp.add_argument("--roster", required=True); sp.add_argument("--queue", required=True,
+                    help="new directory on a filesystem shared with the workers; must be private to the grading team")
+    sp.add_argument("--sandbox", choices=["docker", "none"], default="docker")
+    sp.add_argument("--no-allow-local", action="store_true", help="refuse roster entries that are local paths")
+
+    sp = add("worker", cmd_worker, "grade jobs from a queue directory until interrupted (or --idle-exit)")
+    sp.add_argument("queue"); sp.add_argument("--jobs", type=int, default=1, help="jobs graded in parallel by this worker")
+    sp.add_argument("--lease-seconds", type=float, default=300.0,
+                    help="a worker silent for longer than this (plus a margin) is presumed dead (default 300)")
+    sp.add_argument("--idle-exit", action="store_true", help="exit once no job is pending or claimed")
+    sp.add_argument("--poll", type=float, default=1.0, help=argparse.SUPPRESS)
+    sp.add_argument("--token-env", help="env var holding a GitHub token (default GITHUB_TOKEN, then GH_TOKEN)")
+
+    sp = add("queue-status", cmd_queue_status, "show pending/claimed/done/failed counts, workers and stale leases")
+    sp.add_argument("queue"); sp.add_argument("--json", action="store_true")
+
+    sp = add("collect", cmd_collect, "assemble a run from a queue's results (same output as `grade`)")
+    sp.add_argument("queue"); sp.add_argument("--out", help=f"output directory (default {DEFAULT_RUNS}/<run-id>)")
+    sp.add_argument("--lms", action="append", choices=["canvas", "moodle"], default=[])
+    sp.add_argument("--include-pending", action="store_true")
+    sp.add_argument("--partial", action="store_true",
+                    help="collect even if jobs are unfinished; missing ones become errors with code not_graded")
 
     sp = add("serve", cmd_serve, "start the web UI")
     sp.add_argument("--dir", default=str(DEFAULT_RUNS), help="runs directory (default .markbook/runs)")
