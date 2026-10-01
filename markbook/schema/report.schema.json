@@ -124,6 +124,7 @@
             "runtime": {
               "enum": [
                 "docker",
+                "podman",
                 "none"
               ]
             },

@@ -23,3 +23,54 @@ jobs:
       - run: pytest -q
         env:
           MARKBOOK_TEST_IMAGE: busybox:latest
+
+  # Podman support is verified ONLY here: no developer machine of this project has Podman.
+  # Runs the same real-runtime isolation tests as Docker, against rootless Podman on the runner.
+  podman:
+    runs-on: ubuntu-latest
+    env:
+      MARKBOOK_TEST_PODMAN_IMAGE: docker.io/library/busybox:latest
+      MARKBOOK_TEST_PODMAN_PY_IMAGE: docker.io/library/python:3.12-slim
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[dev]'
+      - name: Podman diagnostics (version, rootless, cgroups, subuid, registries)
+        run: |
+          set +e
+          id; uname -a
+          podman --version
+          podman info
+          echo "--- cgroup"; stat -fc %T /sys/fs/cgroup; cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/cgroup.controllers 2>&1
+          cat /sys/fs/cgroup/cgroup.controllers 2>&1
+          echo "--- subuid/subgid"; grep "$(id -un)" /etc/subuid /etc/subgid 2>&1
+          echo "--- registries"; cat /etc/containers/registries.conf 2>&1 | grep -v '^#' | grep -v '^$'
+          echo "--- markbook doctor"; markbook doctor
+          true
+      - name: Pull test images (fully qualified, Podman does not resolve short names without a TTY)
+        run: |
+          podman pull docker.io/library/busybox:latest
+          podman pull docker.io/library/python:3.12-slim
+          podman images
+      - name: Smoke test, same flags as markbook with output on failure
+        run: |
+          set -x
+          podman run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --memory 64m --memory-swap 64m --cpus 1 --pids-limit 64 --user "$(id -u):$(id -g)" \
+            --tmpfs /work:rw,exec,size=8m,mode=1777 docker.io/library/busybox:latest \
+            sh -c 'id -u; cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/pids.max /sys/fs/cgroup/cpu.max'
+      - name: Isolation tests under Podman (verbose; skips are failures here)
+        run: |
+          set -o pipefail
+          pytest -v -rs -m docker tests/test_docker_sandbox.py tests/test_container_argv.py 2>&1 | tee podman-tests.log
+          if grep -E 'podman\] SKIPPED|\[podman\].*SKIPPED' podman-tests.log; then
+            echo "::error::Podman tests were skipped, so Podman was NOT verified"; exit 1
+          fi
+          grep -cE '\[podman\].*PASSED' podman-tests.log
+      - name: Full suite
+        run: pytest -q
+      - name: Leaked containers (must be empty)
+        if: always()
+        run: podman ps -a --filter label=markbook=1
