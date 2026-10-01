@@ -197,6 +197,7 @@ markbook show RUN STUDENT
 markbook override RUN STUDENT [-c CRITERION (-p POINTS | --accept-suggestion)] [--waive-late] [--clear similarity|borderline] [-m COMMENT]
 markbook retry RUN [--sandbox docker|none] [--jobs N]
 markbook runs [--dir DIR] [--json]
+markbook stats RUN [--idle-minutes N] [--baseline CSV] [--json]
 markbook report RUN [--lms canvas|moodle ...] [--include-pending] [--out DIR]
 markbook schema
 markbook doctor [--clean]
@@ -309,7 +310,11 @@ $ markbook override demo1 erin --waive-late -m "Approved extension."
 - A decision never edits the raw result; it is appended to `overrides.json` with reviewer, time, and what it replaced.
 - `--reviewer NAME` (or `MARKBOOK_REVIEWER`) sets who is recorded; default is the OS user.
 - Similarity is a **routing signal, not a verdict**. It never changes a grade, and each flag shows the matching files so a human can verify it.
-- "Review load" in the summary is a *modelled* figure: baseline is every criterion of every submission checked by hand; review items are unresolved manual/error criteria plus similarity, borderline and fetch-failure flags. It is a workload estimate, not a measured time saving.
+- "Review load" in the summary is a *modelled* figure: baseline is every criterion of every submission checked by hand; review items are unresolved manual/error criteria plus similarity, borderline and fetch-failure flags. It is a workload estimate, not a measured time saving; see [Measuring the saving](#measuring-the-saving) for how to measure one.
+
+## Measuring the saving
+
+`markbook stats RUN` derives review-effort numbers from the audit log (and, in the web UI, a small view log): decisions per reviewer, active review time (a lower bound; gaps over `--idle-minutes` are breaks), median seconds per decision, items still queued, and the AI-assisted share and accept-unchanged rate. With `--baseline manual.csv` (`submission_id,seconds`, the same submissions graded entirely by hand) it prints the measured comparison next to the modelled review-load figure, labelled with its sample size and with cautions when the sample is small or mismatched. It never extrapolates. Markbook makes no measured time-saving claim; [docs/MEASURING.md](docs/MEASURING.md) is a short protocol for getting a fair one.
 
 ## Retrying failures
 

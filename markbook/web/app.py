@@ -27,6 +27,8 @@ from ..sandbox import SandboxUnavailable
 from ..spec import SpecError, load_spec
 from ..store import StoreError, _write_atomic, current, load_overrides, record_decision, save_corpora, save_run
 
+from ..views import MAX_REVIEWER, record_view
+
 RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MAX_UPLOAD = 2 * 1024 * 1024
 MAX_ROSTER_ROWS = 1000
@@ -258,6 +260,18 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
         decisions = [d for d in load_overrides(p)["decisions"] if d["submission"] == sid]
         return render_template("submission.html", run=run, run_id=run_id, sub=sub, prev_id=prev_id,
                                next_id=next_id, in_queue=sid in q, queue_left=len(q), decisions=decisions)
+
+    @app.post("/runs/<run_id>/s/<sid>/view")
+    def view_event(run_id, sid):
+        """Session boundary for `markbook stats`: who opened which submission, when. Nothing else is stored."""
+        p = run_path(run_id)
+        reviewer = (request.form.get("reviewer") or "web").strip() or "web"
+        if len(reviewer) > MAX_REVIEWER:
+            abort(400)
+        if not (p / "run.json").is_file() or not any(s["id"] == sid for s in load_current(p)["submissions"]):
+            abort(404)
+        record_view(p, run_id, sid, reviewer)
+        return Response(status=204)
 
     @app.post("/runs/<run_id>/s/<sid>/decide")
     def decide(run_id, sid):
