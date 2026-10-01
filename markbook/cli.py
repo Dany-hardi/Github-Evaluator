@@ -7,6 +7,8 @@ Exit codes (stable, for scripts and CI):
   3  sandbox unavailable (Docker missing/unreachable and --sandbox docker requested)
   4  success, but some submissions need human review (only with --fail-on-review)
   5  `pin` wrote its outputs, but some repositories could not be pinned (see pins.json)
+  6  ai-check only: AI unavailable (SDK missing, no credentials, or model unreachable); nothing was evaluated
+     (ai-check also exits 1 when a call or a --suite fixture fails, or the cost gate refuses to start)
 """
 from __future__ import annotations
 
@@ -409,6 +411,11 @@ def cmd_doctor(args) -> int:
     return 0 if ok_all else 1
 
 
+def cmd_ai_check(args) -> int:
+    from . import ai_check
+    return ai_check.run(model=args.model, suite=args.suite, as_json=args.json, max_cost_usd=args.max_cost_usd)
+
+
 def cmd_serve(args) -> int:
     try:
         from .web.app import create_app
@@ -623,6 +630,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("run")
     sp.add_argument("--sandbox", choices=["docker", "none"], default="docker")
     sp.add_argument("--jobs", type=int, default=4); sp.add_argument("--token-env")
+
+    sp = add("ai-check", cmd_ai_check, "verify the AI reviewer assist against the live API (sends small synthetic "
+                                       "submissions only; needs the `ai` extra and credentials)")
+    sp.add_argument("--model", default=DEFAULT_MODEL, help=f"model to test (default {DEFAULT_MODEL})")
+    sp.add_argument("--suite", action="store_true", help="also run the fixture regression suite (a few cents)")
+    sp.add_argument("--json", action="store_true", help="machine-readable output")
+    sp.add_argument("--max-cost-usd", type=float, default=0.50,
+                    help="refuse to start --suite if the estimated cost exceeds this (default 0.50)")
 
     sp = add("serve", cmd_serve, "start the web UI")
     sp.add_argument("--dir", default=str(DEFAULT_RUNS), help="runs directory (default .markbook/runs)")

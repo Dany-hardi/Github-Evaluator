@@ -201,6 +201,7 @@ markbook stats RUN [--idle-minutes N] [--baseline CSV] [--json]
 markbook report RUN [--lms canvas|moodle ...] [--include-pending] [--out DIR]
 markbook schema
 markbook doctor [--clean]
+markbook ai-check [--model M] [--suite] [--json] [--max-cost-usd N]
 markbook serve [--dir DIR] [--host H] [--port P] [--sandbox docker|none]
 markbook demo [--dir DIR] [--out DIR] [--serve]
 ```
@@ -355,7 +356,7 @@ How it is constrained:
 - **Fails safe.** No SDK, no credentials, a refusal, an API error: the criterion simply has no suggestion. Credentials are checked before any repository is cloned.
 - Default model `claude-opus-5-5` (`--ai-model` to change).
 
-> **Verification status.** The request format was checked against the real Anthropic SDK (1.11) by capturing the exact JSON it puts on the wire, and all behaviour is tested with a fake client. It has **not** been run against the live API: there was no API key in the development environment. Try it on one submission first.
+> **Verification status.** The request format was checked against the real Anthropic SDK (1.11) by capturing the exact JSON it puts on the wire, and all behaviour is tested with a fake client. It has **not** been run against the live API: there was no API key in the development environment. To check it with your own key, run `markbook ai-check` (one tiny call) and `markbook ai-check --suite` (a few cents of synthetic fixtures, including prompt-injection and delimiter break-out cases); see [docs/AI-CHECK.md](docs/AI-CHECK.md). As of this commit neither has been run live.
 
 ## Web UI
 

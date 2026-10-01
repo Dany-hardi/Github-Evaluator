@@ -23,7 +23,8 @@ markbook = "markbook.cli:main"
 include = ["markbook*"]
 
 [tool.setuptools.package-data]
-markbook = ["schema/*.json", "web/templates/*.html", "web/static/*"]
+markbook = ["schema/*.json", "web/templates/*.html", "web/static/*",
+            "ai_fixtures/manifest.json", "ai_fixtures/*/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
