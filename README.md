@@ -400,7 +400,7 @@ MARKBOOK_TEST_IMAGE=busybox:latest pytest -m docker   # isolation tests need Doc
 markbook demo --dir /tmp/demo    # regenerate the fixture cohort
 ```
 
-Developed and tested on Python 3.14 and 3.13; the source is syntax-checked against the 3.10 grammar, which is the declared minimum, but 3.10 itself has not been run.
+CI runs the full suite, including the real-Docker isolation tests, on Python 3.10, 3.11, 3.12 and 3.13; local development is on 3.14. (CI caught a bug that local runs on 3.13/3.14 could not: `communicate()` on a closed pipe fails on Python < 3.13.)
 
 The suite includes real-Docker isolation tests (non-root, no network, disk cap, runaway-process kill, no leaked containers) which skip automatically when Docker or the image is unavailable, and validates all report output against the JSON Schema.
 
