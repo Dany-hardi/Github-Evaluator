@@ -1,1 +1,0 @@
-"""GitHub Evaluator source package."""

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ sub.name }} · {{ run.assignment.name }}{% endblock %}
+{% block content %}
+{% set sc = run.assignment.scale %}
+<span id="view-beacon" data-url="{{ url_for('view_event', run_id=run_id, sid=sub.id) }}" hidden></span>
+<div class="page-head">
+  <div>
+    <p class="crumb"><a href="{{ url_for('index') }}">Runs</a> / <a href="{{ url_for('run_view', run_id=run_id) }}">{{ run.assignment.name }}</a> / <span class="mono">{{ sub.id }}</span></p>
+    <h1>{{ sub.name }}</h1>
+    <p class="muted mono small">{{ sub.repo }}{% if sub.commit %} @ {{ sub.commit[:10] }}{% endif %}</p>
+  </div>
+  <nav class="pager" aria-label="Move between submissions">
+    {% if prev_id %}<a class="btn ghost small" id="prev" href="{{ url_for('submission_view', run_id=run_id, sid=prev_id) }}" accesskey="k">← Prev <kbd>k</kbd></a>{% endif %}
+    {% if next_id %}<a class="btn ghost small" id="next" href="{{ url_for('submission_view', run_id=run_id, sid=next_id) }}" accesskey="j">Next <kbd>j</kbd> →</a>{% endif %}
+  </nav>
+</div>
+
+{% if sub.status == 'error' %}
+<section class="card"><h2>Could not be graded</h2>
+  <p class="flash error"><strong>{{ sub.error.code }}</strong>: {{ sub.error.message }}</p>
+  <p class="muted">Fix the repository URL or access, then re-run just this student by adding them to a new run.</p></section>
+{% else %}
+
+<section class="scorebar card">
+  <div><div class="big">{{ sub.score.scaled|num }}<span class="muted"> / {{ sc|num }}</span>{% if not sub.score.complete %}<span class="badge review">provisional</span>{% endif %}</div>
+    <div class="muted small">{{ sub.score.final|num }} of {{ sub.score.max|num }} points{% if sub.score.penalty %} · late penalty −{{ sub.score.penalty|num }}{% endif %}{% if sub.score.pending_points %} · {{ sub.score.pending_points|num }} pending{% endif %}</div></div>
+  <div class="meta small">
+    {% if sub.history and sub.history.commits is not none %}<div>{{ sub.history.commits }} commits · {{ sub.history.active_days }} active day{{ 's' if sub.history.active_days != 1 }} · {{ sub.history.authors }} author{{ 's' if sub.history.authors != 1 }}</div>{% endif %}
+    {% if sub.late and sub.late.is_late %}<div>⏰ {{ sub.late.hours_late|num }} h after the deadline
+      <form method="post" action="{{ url_for('decide', run_id=run_id, sid=sub.id) }}" class="inline">
+        <input type="hidden" name="reviewer" class="reviewer-field">
+        <input type="hidden" name="action" value="{{ 'restore_late' if sub.late.waived else 'waive_late' }}">
+        <button class="linklike" type="submit">{{ 'Waived · restore penalty' if sub.late.waived else 'Waive penalty' }}</button></form></div>{% endif %}
+    {% for n in sub.notes %}<div class="muted">{{ n }}</div>{% endfor %}
+  </div>
+</section>
+
+{% for r in sub.triage.reasons if r.code in ('similarity', 'borderline') %}
+<section class="card flagcard {{ r.code }}">
+  <h2>{{ 'Similar to another submission' if r.code == 'similarity' else 'Close to the pass mark' }}</h2>
+  <p>{{ r.detail }}</p>
+  {% if r.code == 'similarity' %}
+    {% for m in sub.similarity %}<p class="small">With <a href="{{ url_for('submission_view', run_id=run_id, sid=m['with']) }}">{{ m.with_name }}</a>:
+      {% for f in m.files %}<span class="mono">{{ f.a_file if sub.id < m['with'] else f.b_file }} ↔ {{ f.b_file if sub.id < m['with'] else f.a_file }}</span> ({{ f.score|pct }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endfor %}
+  {% endif %}
+  <form method="post" action="{{ url_for('decide', run_id=run_id, sid=sub.id) }}" class="row">
+    <input type="hidden" name="reviewer" class="reviewer-field"><input type="hidden" name="action" value="clear_{{ r.code }}">
+    <input type="text" name="comment" placeholder="Why is this fine? (kept in the audit log)" aria-label="Reason" required>
+    <button class="btn small" type="submit">Mark reviewed</button>
+  </form>
+</section>
+{% endfor %}
+
+{% for c in sub.criteria %}
+<section class="card crit {{ c.status }}{{ ' pending' if c.needs_review and not c.override }}" id="c-{{ c.id }}">
+  <header class="crit-head">
+    <div>
+      <h2>{{ c.title }}</h2>
+      <span class="badge {{ c.status }}">{{ c.status|capitalize }}</span>
+      <span class="muted small mono">{{ c.type }} · {{ c.id }}</span>
+    </div>
+    <div class="pts">
+      {% if c.override %}<strong>{{ c.override.points|num }}</strong> <span class="muted">/ {{ c.max_points|num }}</span><div class="small muted">overridden · was {{ c.points|num }}</div>
+      {% elif c.status in ('manual', 'error') %}<span class="muted">pending / {{ c.max_points|num }}</span>
+      {% else %}<strong>{{ c.points|num }}</strong> <span class="muted">/ {{ c.max_points|num }}</span>{% endif %}
+    </div>
+  </header>
+  {% if c.evidence %}
+  <dl class="evidence">
+    {% for e in c.evidence %}<div><dt>{{ e.label }}</dt><dd>{% if e.text %}<pre>{{ e.text }}</pre>{% else %}<span class="muted">—</span>{% endif %}</dd></div>{% endfor %}
+  </dl>
+  {% endif %}
+  {% if c.suggestion and not c.override %}
+  <aside class="ai-box" aria-label="AI suggestion">
+    <div class="ai-head"><strong>AI suggestion</strong> <span class="badge review">advisory, not applied</span>
+      <span class="muted small">{{ c.suggestion.model }} · {{ c.suggestion.confidence }} confidence</span></div>
+    <p><strong>{{ c.suggestion.points|num }} / {{ c.max_points|num }}</strong>. {{ c.suggestion.rationale }}</p>
+    {% for x in c.suggestion.concerns %}<p class="small ai-concern">⚠ {{ x }}</p>{% endfor %}
+    {% if c.suggestion.truncated %}<p class="small muted">Did not see: {{ c.suggestion.omitted_files|join(', ') }}</p>{% endif %}
+    <form method="post" action="{{ url_for('decide', run_id=run_id, sid=sub.id) }}" class="row">
+      <input type="hidden" name="reviewer" class="reviewer-field"><input type="hidden" name="action" value="accept_ai">
+      <input type="hidden" name="criterion" value="{{ c.id }}">
+      <input type="text" name="comment" placeholder="Comment shown to the student (optional)" aria-label="Comment">
+      <button class="btn small ghost" type="submit">Use {{ c.suggestion.points|num }} (recorded as AI-assisted)</button>
+    </form>
+  </aside>
+  {% endif %}
+  {% if c.override and c.override.comment %}<p class="override-note"><strong>{{ c.override.reviewer }}</strong>{% if c.override.ai_assisted %} <span class="muted small">(AI-assisted)</span>{% endif %}: {{ c.override.comment }}</p>{% endif %}
+
+  {% set pending = c.status in ('manual', 'error') and not c.override %}
+  <details class="override-box"{{ ' open' if pending }}>
+    {% if not pending %}<summary>Override points</summary>{% endif %}
+  <form method="post" action="{{ url_for('decide', run_id=run_id, sid=sub.id) }}" class="decide row">
+    <input type="hidden" name="reviewer" class="reviewer-field"><input type="hidden" name="action" value="points">
+    <input type="hidden" name="criterion" value="{{ c.id }}">
+    <label class="sr" for="p-{{ c.id }}">Points for {{ c.title }}</label>
+    <input id="p-{{ c.id }}" type="number" name="points" min="0" max="{{ c.max_points }}" step="0.25" required
+           value="{{ (c.override.points if c.override else (c.points if c.status not in ('manual', 'error') else '')) }}" placeholder="0–{{ c.max_points|num }}">
+    <label class="sr" for="m-{{ c.id }}">Comment for the student</label>
+    <input id="m-{{ c.id }}" type="text" name="comment" placeholder="Comment shown to the student" value="{{ c.override.comment if c.override else '' }}">
+    <button class="btn small {{ '' if c.needs_review and not c.override else 'ghost' }}" type="submit">{{ 'Override' if c.status not in ('manual', 'error') or c.override else 'Grade' }}</button>
+  </form>
+  </details>
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>Note to student</h2>
+  <form method="post" action="{{ url_for('decide', run_id=run_id, sid=sub.id) }}" class="row">
+    <input type="hidden" name="reviewer" class="reviewer-field"><input type="hidden" name="action" value="note">
+    <input type="text" name="comment" value="{{ sub.reviewer_note or '' }}" placeholder="Optional overall comment" aria-label="Overall comment" required>
+    <button class="btn small ghost" type="submit">Save note</button>
+  </form>
+</section>
+
+{% if decisions %}
+<section class="card quiet">
+  <h2>Audit log</h2>
+  <ul class="plain small">
+  {% for d in decisions|reverse %}<li><span class="mono">{{ d.at[:19].replace('T', ' ') }}</span> · <strong>{{ d.reviewer }}</strong> · {{ d.action.replace('_', ' ') }}{% if d.criterion %} {{ d.criterion }} → {{ d.points|num }}{% endif %}{% if d.comment %} — “{{ d.comment }}”{% endif %}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endif %}
+
+<div class="queue-foot muted small">{% if in_queue %}{{ queue_left }} left in the review queue.{% else %}This submission is resolved.{% endif %}</div>
+{% endblock %}

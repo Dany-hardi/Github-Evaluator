@@ -1,0 +1,807 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:markbook:report:1",
+  "title": "markbook report",
+  "description": "Result of one `markbook grade` run with human overrides applied. Consumers should ignore unknown properties; breaking changes bump schema_version.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "run_id",
+    "created_at",
+    "finished_at",
+    "assignment",
+    "submissions",
+    "similarity",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assignment": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "spec_sha256",
+        "scale",
+        "max_points",
+        "pass_mark",
+        "borderline_margin",
+        "deadline",
+        "late_penalty",
+        "sandbox",
+        "criteria"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "spec_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_points": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "pass_mark": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "borderline_margin": {
+          "type": "number"
+        },
+        "deadline": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "late_penalty": {
+          "type": "object",
+          "required": [
+            "percent_per_day",
+            "max_percent",
+            "grace_minutes"
+          ],
+          "properties": {
+            "percent_per_day": {
+              "type": "number"
+            },
+            "max_percent": {
+              "type": "number"
+            },
+            "grace_minutes": {
+              "type": "integer"
+            }
+          }
+        },
+        "sandbox": {
+          "type": "object",
+          "required": [
+            "runtime",
+            "image"
+          ],
+          "properties": {
+            "runtime": {
+              "enum": [
+                "docker",
+                "podman",
+                "none"
+              ]
+            },
+            "image": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title",
+              "type",
+              "max_points"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "file_exists",
+                  "command",
+                  "cases",
+                  "readme",
+                  "git",
+                  "manual"
+                ]
+              },
+              "max_points": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "submissions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/submission"
+      }
+    },
+    "similarity": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "a",
+          "b",
+          "score",
+          "shared_fingerprints",
+          "files"
+        ],
+        "properties": {
+          "a": {
+            "type": "string"
+          },
+          "b": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "shared_fingerprints": {
+            "type": "integer"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "a_file",
+                "b_file",
+                "shared",
+                "score"
+              ],
+              "properties": {
+                "a_file": {
+                  "type": "string"
+                },
+                "b_file": {
+                  "type": "string"
+                },
+                "shared": {
+                  "type": "integer"
+                },
+                "score": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "submissions",
+        "graded",
+        "errors",
+        "complete",
+        "mean",
+        "median",
+        "min",
+        "max",
+        "pass_rate",
+        "late",
+        "similarity_flags",
+        "review_load"
+      ],
+      "properties": {
+        "submissions": {
+          "type": "integer"
+        },
+        "graded": {
+          "type": "integer"
+        },
+        "errors": {
+          "type": "integer"
+        },
+        "complete": {
+          "type": "integer"
+        },
+        "mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "median": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "provisional_mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pass_rate": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "late": {
+          "type": "integer"
+        },
+        "similarity_flags": {
+          "type": "integer"
+        },
+        "review_load": {
+          "type": "object",
+          "required": [
+            "baseline_items",
+            "review_items",
+            "reduction_pct",
+            "fully_automatic_submissions",
+            "definition"
+          ],
+          "properties": {
+            "baseline_items": {
+              "type": "integer"
+            },
+            "review_items": {
+              "type": "integer"
+            },
+            "reduction_pct": {
+              "type": "number"
+            },
+            "fully_automatic_submissions": {
+              "type": "integer"
+            },
+            "definition": {
+              "type": "string"
+            }
+          }
+        },
+        "ai_assist": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "suggestions": {
+              "type": "integer"
+            },
+            "input_tokens": {
+              "type": "integer"
+            },
+            "output_tokens": {
+              "type": "integer"
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "submission": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "email",
+        "repo",
+        "ref",
+        "commit",
+        "status",
+        "error",
+        "criteria",
+        "history",
+        "late",
+        "notes",
+        "similarity",
+        "duration_s",
+        "score",
+        "triage"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "graded",
+            "error"
+          ]
+        },
+        "error": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/criterion"
+          }
+        },
+        "history": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "commits",
+            "authors",
+            "active_days",
+            "largest_commit_share",
+            "shallow"
+          ],
+          "properties": {
+            "commits": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "authors": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "active_days": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "largest_commit_share": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "shallow": {
+              "type": "boolean",
+              "description": "true when only the tip commit was fetched (no `git` criterion in the spec), so history counts are null"
+            }
+          }
+        },
+        "late": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "deadline",
+            "last_commit",
+            "is_late",
+            "hours_late",
+            "penalty_pct",
+            "waived"
+          ],
+          "properties": {
+            "deadline": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_commit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "is_late": {
+              "type": "boolean"
+            },
+            "hours_late": {
+              "type": "number"
+            },
+            "penalty_pct": {
+              "type": "number"
+            },
+            "waived": {
+              "type": "boolean"
+            }
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "similarity": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "with",
+              "with_name",
+              "score",
+              "files"
+            ],
+            "properties": {
+              "with": {
+                "type": "string"
+              },
+              "with_name": {
+                "type": "string"
+              },
+              "score": {
+                "type": "number"
+              },
+              "files": {
+                "type": "array"
+              }
+            }
+          }
+        },
+        "duration_s": {
+          "type": "number"
+        },
+        "score": {
+          "type": "object",
+          "required": [
+            "raw",
+            "penalty",
+            "final",
+            "max",
+            "scaled",
+            "scale",
+            "pending_points",
+            "complete"
+          ],
+          "description": "raw/final/scaled are null when the submission could not be fetched. When complete is false, final/scaled exclude criteria still pending review.",
+          "properties": {
+            "raw": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "penalty": {
+              "type": "number"
+            },
+            "final": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "max": {
+              "type": "number"
+            },
+            "scaled": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "scale": {
+              "type": "number"
+            },
+            "pending_points": {
+              "type": "number"
+            },
+            "complete": {
+              "type": "boolean"
+            }
+          }
+        },
+        "triage": {
+          "type": "object",
+          "required": [
+            "state",
+            "reasons"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "auto",
+                "review"
+              ]
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "code",
+                  "detail"
+                ],
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "criterion",
+                      "similarity",
+                      "borderline",
+                      "fetch_failed"
+                    ]
+                  },
+                  "criterion": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "reviewer_note": {
+          "type": "string"
+        }
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "type",
+        "max_points",
+        "points",
+        "status",
+        "evidence",
+        "needs_review",
+        "review_reason",
+        "override"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "max_points": {
+          "type": "number"
+        },
+        "points": {
+          "type": "number",
+          "description": "Points the automation awarded. A human override, if any, is in `override`."
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "partial",
+            "failed",
+            "manual",
+            "error"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "text"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "needs_review": {
+          "type": "boolean"
+        },
+        "review_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "override": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "points"
+          ],
+          "properties": {
+            "points": {
+              "type": "number"
+            },
+            "comment": {
+              "type": "string"
+            },
+            "reviewer": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            },
+            "ai_assisted": {
+              "type": "boolean"
+            }
+          }
+        },
+        "suggestion": {
+          "type": "object",
+          "description": "Advisory AI suggestion for a manual criterion (only with --ai). Never applied automatically and never part of the score.",
+          "required": [
+            "points",
+            "confidence",
+            "rationale",
+            "concerns",
+            "model",
+            "truncated",
+            "omitted_files"
+          ],
+          "properties": {
+            "points": {
+              "type": "number"
+            },
+            "confidence": {
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "rationale": {
+              "type": "string"
+            },
+            "concerns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "model": {
+              "type": "string"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "omitted_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "usage": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "input_tokens": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "output_tokens": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

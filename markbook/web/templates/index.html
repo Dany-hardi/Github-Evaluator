@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Runs · Markbook{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Runs</h1>
+    <p class="muted">Each run grades a roster against one assignment spec. Open a run to work through its review queue.</p>
+  </div>
+  <a class="btn" href="{{ url_for('new_run') }}">New run</a>
+</div>
+
+{% if not runs %}
+<section class="empty card">
+  <h2>No runs yet</h2>
+  <p>Create a run from a spec and a roster, or try the offline demo from a terminal:</p>
+  <pre class="code">markbook demo --out .markbook/runs/demo</pre>
+  <p class="muted">Then reload this page.</p>
+</section>
+{% else %}
+<div class="card flush">
+<table class="table">
+  <caption class="sr">Grading runs, newest first</caption>
+  <thead><tr><th scope="col">Assignment</th><th scope="col">Started</th><th scope="col" class="num">Submissions</th>
+  <th scope="col" class="num">Mean</th><th scope="col" class="num">Needs review</th><th scope="col">State</th></tr></thead>
+  <tbody>
+  {% for r in runs %}
+  <tr>
+    <th scope="row"><a href="{{ url_for('run_view', run_id=r.id) }}">{{ r.name }}</a><div class="muted mono small">{{ r.id }}</div></th>
+    <td>{{ r.created[:16].replace('T', ' ') }}</td>
+    {% if r.summary %}
+      <td class="num">{{ r.summary.submissions }}</td>
+      <td class="num">{{ (r.summary.mean if r.summary.mean is not none else r.summary.provisional_mean)|num }}{% if r.summary.mean is none %}<span class="muted" title="provisional: manual review pending">*</span>{% endif %}</td>
+      <td class="num">{% if r.queue %}<span class="badge review">{{ r.queue }}</span>{% else %}<span class="badge auto">0</span>{% endif %}</td>
+      <td><span class="badge done">Done</span></td>
+    {% else %}
+      <td class="num">{{ r.status.total }}</td><td class="num">—</td><td class="num">—</td>
+      <td><span class="badge {{ 'running' if r.state == 'running' else 'error' }}">{{ r.state|capitalize }}</span></td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
