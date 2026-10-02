@@ -123,9 +123,11 @@ def slug(text: str, limit: int = 40, fallback: str = "check") -> str:
 def _clean(value, *, limit: int = MAX_TEXT, multiline: bool = False) -> str:
     text = "" if value is None else str(value)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    keep = "\n\t" if multiline else "\t"
+    if not multiline:   # a line break or tab becomes a space (never silently deleted: "a<newline>b" must not turn into "ab")
+        text = text.replace("\n", " ").replace("\t", " ")
+    keep = "\n\t" if multiline else ""
     text = "".join(ch for ch in text if ch.isprintable() or ch in keep)
-    return (text if multiline else text.replace("\n", " ")).strip()[:limit]
+    return text.strip()[:limit]
 
 
 def _number(value, label: str, problems: list[Problem], where: str, *, minimum=None, maximum=None,
