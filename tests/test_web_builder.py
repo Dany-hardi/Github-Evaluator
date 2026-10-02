@@ -199,3 +199,12 @@ def test_cross_origin_requests_are_refused(client, method, url):
     assert r.status_code == 403
     r = getattr(client, method)(url, data="{}", content_type="application/json", headers={"Sec-Fetch-Site": "cross-site"})
     assert r.status_code == 403
+
+
+def test_the_packages_gate_applies_to_starting_a_run_and_saving_a_template_too(tmp_path, client):
+    model = {**PY_TESTS, "extra_packages": "requests"}
+    r = client.post("/runs/new", data={"builder_json": json.dumps(model), "roster_text": LOCAL_ROSTER}, headers=ORIGIN)
+    assert r.status_code == 400 and "--allow-prepare" in r.get_data(as_text=True)
+    assert not any((tmp_path / "runs").iterdir())
+    s = post_json(client, "/api/rubric/template", {"model": model, "name": "pkgs"})
+    assert s.status_code == 400 and not list((tmp_path / "specs").glob("*")) if (tmp_path / "specs").exists() else s.status_code == 400
