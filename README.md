@@ -581,6 +581,7 @@ markbook/
 
 ## More docs
 
+- [`docs/MARKBOOK_COMPLETE_GUIDE.md`](docs/MARKBOOK_COMPLETE_GUIDE.md): the complete documentation and design guide (architecture, every module, every guard rule, CI/CD, decisions, limits). `sh docs/build_guide.sh` builds it as HTML and PDF.
 - [`docs/DESIGN.md`](docs/DESIGN.md): the design decisions, trade-offs, what was rejected and why.
 - [`docs/BRAND.md`](docs/BRAND.md): the mark, palette, typeface and motion rules, and how the assets are rebuilt.
 - [`docs/MEASURING.md`](docs/MEASURING.md): a fair protocol for measuring the review-time saving.
