@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template, request,
                    url_for)
 
-from .. import __version__, report as reports
+from .. import __version__, report as reports, specbuilder
 from ..grader import grade_cohort, now_iso, preflight
 from ..roster import RosterError, parse_roster
 from ..sandbox import SandboxUnavailable
@@ -34,12 +34,18 @@ MAX_UPLOAD = 2 * 1024 * 1024
 MAX_ROSTER_ROWS = 1000
 
 
+TEMPLATE_FILE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,60}\.yaml$")
+MAX_BUILDER_JSON = 200_000
+
+
 def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token: str | None = None,
-               specs_dir: Path | None = None) -> Flask:
+               specs_dir: Path | None = None, allow_prepare: bool = False) -> Flask:
     app = Flask(__name__)
     app.config.update(MAX_CONTENT_LENGTH=MAX_UPLOAD, SECRET_KEY=secrets.token_hex(16))
     runs_dir = Path(runs_dir).resolve()
     runs_dir.mkdir(parents=True, exist_ok=True)
+    # Saved rubric templates live next to the runs unless the operator points elsewhere (`serve --specs DIR`).
+    specs_dir = Path(specs_dir).resolve() if specs_dir else runs_dir.parent / "specs"
     lock = threading.Lock()
     cache: dict[str, tuple[tuple, dict]] = {}
 
@@ -54,6 +60,27 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
                     _write_atomic(st, json.dumps(data))
             except (OSError, ValueError):
                 pass
+
+    def templates() -> list[dict]:
+        if not specs_dir.is_dir():
+            return []
+        return [{"file": p.name, "editable": p.with_suffix(".builder.json").is_file()}
+                for p in sorted(specs_dir.glob("*.y*ml"))]
+
+    def builder_model(raw: str):
+        """The form's JSON. Never trusted: `specbuilder.build` validates and writes every command itself."""
+        if not raw or len(raw) > MAX_BUILDER_JSON:
+            return None
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def render_new(form, status: int = 200, problems=None):
+        return render_template("new.html", presets=templates(), form=form, catalog=specbuilder.catalog(),
+                               allow_prepare=allow_prepare, builder_state=(form.get("builder_json") or ""),
+                               builder_problems=problems or []), status
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -136,9 +163,8 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
 
     @app.route("/runs/new", methods=["GET", "POST"])
     def new_run():
-        presets = sorted(p.name for p in specs_dir.glob("*.y*ml")) if specs_dir and specs_dir.is_dir() else []
         if request.method == "GET":
-            return render_template("new.html", presets=presets, form={})
+            return render_new({})
         form = request.form
         spec_text = (form.get("spec_text") or "").strip()
         if (f := request.files.get("spec_file")) and f.filename:
@@ -152,14 +178,22 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
         inp = p / "input"
         inp.mkdir(parents=True)
 
-        def fail(msg: str, code: int = 400):
+        def fail(msg: str, code: int = 400, problems=None):
             shutil.rmtree(p, ignore_errors=True)
             flash(msg, "error")
-            return render_template("new.html", presets=presets, form=form), code
+            return render_new(form, code, problems)
 
         preset = form.get("preset")
+        model = builder_model((form.get("builder_json") or "").strip())
         try:
-            if preset and specs_dir:
+            if model is not None:
+                built = specbuilder.build(model, allow_packages=allow_prepare)
+                if not built.ok:
+                    return fail("The rubric needs a few fixes (see the list).", problems=[b.to_dict() for b in built.problems])
+                spec_path = inp / "spec.yaml"
+                spec_path.write_text(built.yaml, encoding="utf-8")
+                spec = load_spec(spec_path)   # unconfined on purpose: this YAML was written by the server, from validated choices
+            elif preset and specs_dir:
                 src = (specs_dir / preset).resolve()
                 if src.parent != specs_dir.resolve() or not src.is_file():
                     return fail("Unknown preset spec.")
@@ -167,7 +201,7 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
                 spec = load_spec(spec_path)
             else:
                 if not spec_text:
-                    return fail("Provide a spec (paste YAML or upload a file).")
+                    return fail("Build the rubric with the form, pick a template, or paste a spec.")
                 spec_path = inp / "spec.yaml"
                 spec_path.write_text(spec_text, encoding="utf-8")
                 spec = load_spec(spec_path, confine=True)
@@ -213,6 +247,53 @@ def create_app(runs_dir: Path, *, runtime: str = "docker", jobs: int = 4, token:
 
         threading.Thread(target=work, name=f"grade-{run_id}", daemon=True).start()
         return redirect(url_for("run_view", run_id=run_id))
+
+    # ── rubric builder API ────────────────────────────────────────────────────
+
+    @app.post("/api/rubric/preview")
+    def rubric_preview():
+        built = specbuilder.build(request.get_json(silent=True), allow_packages=allow_prepare)
+        return jsonify(ok=built.ok, yaml=built.yaml, problems=[p.to_dict() for p in built.problems],
+                       total_points=built.total_points, needs_sandbox=built.needs_sandbox,
+                       uses_prepare=built.uses_prepare)
+
+    @app.post("/rubric/spec.yaml")
+    def rubric_download():
+        model = builder_model((request.form.get("builder_json") or "").strip())
+        built = specbuilder.build(model, allow_packages=allow_prepare)
+        if not built.ok:
+            abort(400)
+        return Response(built.yaml, mimetype="application/yaml; charset=utf-8",
+                        headers={"Content-Disposition": "attachment; filename=spec.yaml"})
+
+    @app.post("/api/rubric/template")
+    def rubric_template_save():
+        data = request.get_json(silent=True) or {}
+        model, name = data.get("model"), specbuilder.slug(str(data.get("name") or ""), 60, "")
+        if not name:
+            return jsonify(ok=False, problems=[{"field": "template_name", "message": "Give the template a name"}]), 400
+        built = specbuilder.build(model, allow_packages=allow_prepare)
+        if not built.ok:
+            return jsonify(ok=False, problems=[p.to_dict() for p in built.problems]), 400
+        target = specs_dir / f"{name}.yaml"
+        if not TEMPLATE_FILE.match(target.name) or target.resolve().parent != specs_dir:
+            return jsonify(ok=False, problems=[{"field": "template_name", "message": "That name cannot be used"}]), 400
+        if target.exists():
+            return jsonify(ok=False, problems=[{"field": "template_name",
+                                                "message": "A template with that name already exists; choose another"}]), 409
+        specs_dir.mkdir(parents=True, exist_ok=True)
+        _write_atomic(target, built.yaml)
+        _write_atomic(target.with_suffix(".builder.json"), json.dumps(model, ensure_ascii=False))
+        return jsonify(ok=True, file=target.name)
+
+    @app.get("/api/rubric/template/<name>")
+    def rubric_template_load(name):
+        if not TEMPLATE_FILE.match(name):
+            abort(404)
+        path = (specs_dir / name).with_suffix(".builder.json")
+        if path.resolve().parent != specs_dir or not path.is_file():
+            abort(404)
+        return jsonify(model=json.loads(path.read_text(encoding="utf-8")))
 
     @app.get("/runs/<run_id>")
     def run_view(run_id):

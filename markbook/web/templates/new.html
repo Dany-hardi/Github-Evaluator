@@ -1,40 +1,188 @@
 {% extends "base.html" %}
 {% block title %}New run · Markbook{% endblock %}
+
+{# One check card. Labels wrap their inputs so a card can be cloned without any id bookkeeping. #}
+{% macro card(meta, removable=False) %}
+<div class="check-card" data-kind="{{ meta.kind }}"{% if removable %} data-removable="1"{% endif %}>
+  <div class="check-head">
+    <label class="check-pick"><input type="checkbox" class="check-on"{% if meta.kind in ('files', 'readme', 'manual') and not removable %} checked{% endif %}>
+      <span class="check-title">{{ meta.label }}</span></label>
+    <label class="check-pts"><span class="sr">Points for {{ meta.label }}</span><input type="number" class="pts" min="0.25" step="0.25" value="{{ meta.points }}" data-field="points"> <span>pts</span></label>
+  </div>
+  <p class="hint check-help">{{ meta.help }}</p>
+  <div class="check-body">
+    <label class="fld"><span>Name on the report</span><input type="text" class="f f-title" data-name="title" value="{{ meta.title }}" maxlength="120" autocomplete="off"></label>
+    {% for f in meta.fields %}
+      {% if f.type == 'text' %}
+        <label class="fld"><span>{{ f.label }}</span><input type="text" class="f" data-name="{{ f.name }}" value="{{ f.default }}"{% if f.hint_from %} data-hint-from="{{ f.hint_from }}"{% endif %} maxlength="500" autocomplete="off"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %}></label>
+      {% elif f.type == 'lines' %}
+        <label class="fld"><span>{{ f.label }}</span><textarea class="f mono" data-name="{{ f.name }}" rows="3" spellcheck="false"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %}>{{ f.default }}</textarea></label>
+      {% elif f.type == 'textarea' %}
+        <label class="fld"><span>{{ f.label }}</span><textarea class="f" data-name="{{ f.name }}" rows="2">{{ f.default }}</textarea></label>
+      {% elif f.type == 'number' %}
+        <label class="fld narrow"><span>{{ f.label }}</span><input type="number" class="f" data-name="{{ f.name }}" min="0" step="1" value="{{ f.default }}"></label>
+      {% elif f.type == 'select' %}
+        <label class="fld"><span>{{ f.label }}</span><select class="f" data-name="{{ f.name }}">{% for v, l in f.options %}<option value="{{ v }}"{{ ' selected' if v == f.default }}>{{ l }}</option>{% endfor %}</select></label>
+      {% elif f.type == 'checkbox' %}
+        <label class="fld inline"><input type="checkbox" class="f" data-name="{{ f.name }}"{{ ' checked' if f.default }}> <span>{{ f.label }}</span></label>
+      {% elif f.type == 'cases' %}
+        <div class="fld cases" data-name="cases">
+          <span>{{ f.label }} <span class="muted small">(what to feed the program, and what it must print)</span></span>
+          <div class="case-list"></div>
+          <button type="button" class="btn ghost small add-case">+ Add a test case</button>
+        </div>
+      {% endif %}
+    {% endfor %}
+    {% if removable %}<button type="button" class="linklike remove-card">Remove this check</button>{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
 {% block content %}
 <div class="page-head"><div>
   <p class="crumb"><a href="{{ url_for('index') }}">Runs</a> / New</p>
   <h1>New run</h1>
-  <p class="muted">Grading starts immediately and keeps going if you close this tab.</p>
+  <p class="muted">Tick what should be checked and Markbook writes the rubric for you. Grading starts immediately and keeps going if you close this tab.</p>
 </div></div>
 
-<form method="post" enctype="multipart/form-data" class="stack">
+<form method="post" enctype="multipart/form-data" class="stack" id="newrun">
+  <input type="hidden" name="builder_json" id="builder_json">
+
   <section class="card rise">
-    <h2>1 · Assignment spec</h2>
-    <p class="muted">The rubric as YAML. Validate it first from a terminal with <code>markbook validate spec.yaml</code>.</p>
-    {% if presets %}
-    <label for="preset">Use a saved spec</label>
-    <select id="preset" name="preset">
-      <option value="">— paste or upload below —</option>
-      {% for p in presets %}<option value="{{ p }}" {{ 'selected' if form.get('preset') == p }}>{{ p }}</option>{% endfor %}
-    </select>
+    <h2>1 · The rubric</h2>
+    <div class="tabs" role="tablist" aria-label="How to define the rubric">
+      <button type="button" role="tab" id="tab-builder" aria-controls="panel-builder" aria-selected="true" class="tab">Build it with the form</button>
+      <button type="button" role="tab" id="tab-template" aria-controls="panel-template" aria-selected="false" class="tab">A saved template{% if presets %} <span class="count">{{ presets|length }}</span>{% endif %}</button>
+      <button type="button" role="tab" id="tab-yaml" aria-controls="panel-yaml" aria-selected="false" class="tab">Paste YAML (advanced)</button>
+    </div>
+    <noscript><p class="flash error">The form builder needs JavaScript. You can still use a saved template or paste a YAML spec below.</p></noscript>
+
+    {# ── tab 1: the form builder ─────────────────────────────────────────── #}
+    <div id="panel-builder" role="tabpanel" aria-labelledby="tab-builder">
+      <div class="builder" id="builder" data-catalog="{{ catalog|tojson|forceescape }}" data-state="{{ builder_state|forceescape }}" data-allow-prepare="{{ '1' if allow_prepare else '0' }}">
+        <div class="builder-grid">
+          <div class="builder-form">
+
+            <fieldset class="bf">
+              <legend>The assignment</legend>
+              <label class="fld"><span>Name</span><input type="text" id="b-name" data-field="name" maxlength="120" placeholder="e.g. TAF1: Blog API" autocomplete="off"></label>
+              <div class="fld-row">
+                <label class="fld narrow"><span>Grade out of</span><input type="number" id="b-scale" data-field="scale" min="0.25" step="any" value="20" data-auto="1"></label>
+                <label class="fld narrow"><span>Pass mark <em class="muted">(optional)</em></span><input type="number" id="b-pass" data-field="pass_mark" min="0" step="any" placeholder="e.g. 10"></label>
+              </div>
+              <label class="fld inline"><input type="checkbox" id="b-deadline-on"> <span>There is a deadline</span></label>
+              <div id="b-deadline" class="indent" hidden>
+                <div class="fld-row">
+                  <label class="fld"><span>Deadline</span><input type="datetime-local" id="b-deadline-at" data-field="deadline_local"></label>
+                  <label class="fld narrow"><span>Time zone</span><input type="text" id="b-offset" data-field="utc_offset" value="+00:00" maxlength="6" aria-describedby="b-offset-help"></label>
+                </div>
+                <p class="hint" id="b-offset-help">Offset from UTC, like +01:00. Filled in from your browser.</p>
+                <div class="fld-row">
+                  <label class="fld narrow"><span>Late penalty, % per day</span><input type="number" id="b-late" data-field="late_percent_per_day" min="0" max="100" step="any" value="10"></label>
+                  <label class="fld narrow"><span>Never more than, %</span><input type="number" id="b-late-max" data-field="late_max_percent" min="0" max="100" step="any" value="50"></label>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="bf">
+              <legend>What should be checked?</legend>
+              <p class="hint">Tick the checks you want, and set the points for each. Everything is optional.</p>
+              <div id="cards">
+                {% for meta in catalog.kinds %}{{ card(meta) }}{% endfor %}
+              </div>
+              <button type="button" class="btn ghost small" id="add-manual">+ Add another manual criterion</button>
+            </fieldset>
+
+            <fieldset class="bf" id="b-runs" hidden>
+              <legend>Where the code runs</legend>
+              <label class="fld"><span>Language</span><select id="b-language" data-field="language">
+                {% for key, lang in catalog.languages.items() %}<option value="{{ key }}">{{ lang.label }}</option>{% endfor %}
+              </select></label>
+              <label class="fld" id="b-image-row" hidden><span>Docker image</span><input type="text" id="b-image" data-field="image" placeholder="e.g. python:3.12-slim" maxlength="200"></label>
+              <label class="fld narrow"><span>Time limit per command, seconds</span><input type="number" id="b-timeout" data-field="timeout" min="1" max="600" step="1" value="15"></label>
+              {% if allow_prepare %}
+              <label class="fld" id="b-packages-row"><span>Extra packages <em class="muted">(optional, comma separated)</em></span><input type="text" id="b-packages" data-field="extra_packages" placeholder="e.g. requests, flask==3.0.3" autocomplete="off"></label>
+              <p class="hint">Installed once, with network access. Students' own code never gets network.</p>
+              {% endif %}
+              <p class="hint">The code runs in a locked-down container with no network, a time limit and a memory limit.</p>
+            </fieldset>
+
+          </div>
+
+          <aside class="builder-preview" aria-label="Live preview of the rubric">
+            <div class="preview-total" id="total" aria-live="polite">0 points</div>
+            <ul id="problems" class="problems" role="status" aria-live="polite"></ul>
+            <details open>
+              <summary>The spec Markbook will use <span class="muted small">(YAML, written for you)</span></summary>
+              <pre class="yaml"><code id="yaml-preview">Fill in the form and the rubric appears here.</code></pre>
+            </details>
+            <div class="row">
+              <button type="button" class="btn ghost small" id="copy-yaml">Copy YAML</button>
+              <button type="button" class="btn ghost small" id="download-yaml">Download spec.yaml</button>
+            </div>
+            <div class="save-template">
+              <label class="fld"><span>Save as a template</span><input type="text" id="template-name" maxlength="60" placeholder="e.g. Python lab" data-field="template_name" autocomplete="off"></label>
+              <button type="button" class="btn small" id="save-template">Save</button>
+              <span id="template-msg" class="small" role="status" aria-live="polite"></span>
+            </div>
+          </aside>
+        </div>
+        <template id="tpl-manual">{% for meta in catalog.kinds if meta.kind == 'manual' %}{{ card(meta, removable=True) }}{% endfor %}</template>
+        <template id="tpl-case">
+          <div class="case-row">
+            <label class="fld"><span>Name</span><input type="text" class="c-name" placeholder="optional" maxlength="80"></label>
+            <label class="fld"><span>Arguments after the command</span><input type="text" class="c-args" placeholder="optional, e.g. 2 3" maxlength="200"></label>
+            <label class="fld"><span>Input typed into the program</span><textarea class="c-stdin" rows="2" placeholder="optional"></textarea></label>
+            <label class="fld"><span>Expected output</span><textarea class="c-expected" rows="2" placeholder="exactly what it must print"></textarea></label>
+            <label class="fld inline"><input type="checkbox" class="c-hidden"> <span>Keep secret (hide the expected output in feedback)</span></label>
+            <button type="button" class="linklike remove-case">Remove this case</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    {# ── tab 2: a saved template ─────────────────────────────────────────── #}
+    <div id="panel-template" role="tabpanel" aria-labelledby="tab-template" hidden>
+      {% if presets %}
+      <label class="fld" for="preset"><span>Saved templates</span></label>
+      <select id="preset" name="preset" data-editable='{{ presets|selectattr("editable")|map(attribute="file")|list|tojson|forceescape }}'>
+        <option value="">— choose one —</option>
+        {% for p in presets %}<option value="{{ p.file }}" {{ 'selected' if form.get('preset') == p.file }}>{{ p.file }}{{ '' if p.editable else ' (YAML only)' }}</option>{% endfor %}
+      </select>
+      <div class="row"><button type="button" class="btn ghost small" id="edit-template" disabled>Edit it in the form</button></div>
+      <p class="hint">Templates you saved from the form can be edited in the form. Others are plain YAML files, used as they are.</p>
+      {% else %}
+      <p class="muted">No templates yet. Build a rubric with the form and press <strong>Save</strong>; it will appear here for next time.</p>
+      {% endif %}
+    </div>
+
+    {# ── tab 3: YAML ─────────────────────────────────────────────────────── #}
+    <div id="panel-yaml" role="tabpanel" aria-labelledby="tab-yaml" hidden>
+      <p class="muted">For people who already write specs. Validate one first from a terminal with <code>markbook validate spec.yaml</code>.</p>
+      <label class="fld" for="spec_file"><span>Upload spec.yaml</span></label>
+      <div class="drop"><input id="spec_file" type="file" name="spec_file" accept=".yaml,.yml,text/yaml"><span class="small">or drop the file here</span><span class="picked"></span></div>
+      <label class="fld" for="spec_text"><span>…or paste it</span></label>
+      <textarea id="spec_text" name="spec_text" rows="10" spellcheck="false" class="mono" placeholder="name: My assignment&#10;scale: 100&#10;sandbox: {image: python:3.12-slim}&#10;criteria:&#10;  - id: …">{{ form.get('spec_text', '') }}</textarea>
+      <p class="hint">Uploaded specs must be self-contained: <code>overlay</code>, <code>starter</code> and <code>prepare</code> are only available through saved templates or the CLI.</p>
+    </div>
+
+    {% if builder_problems %}
+    <div class="flash error" role="alert"><strong>Please fix:</strong>
+      <ul class="problems">{% for p in builder_problems %}<li>{{ p.message }}{% if p.field %} <span class="muted small">({{ p.field }})</span>{% endif %}</li>{% endfor %}</ul></div>
     {% endif %}
-    <label for="spec_file">Upload spec.yaml</label>
-    <div class="drop"><input id="spec_file" type="file" name="spec_file" accept=".yaml,.yml,text/yaml"><span class="small">or drop the file here</span><span class="picked"></span></div>
-    <label for="spec_text">…or paste it</label>
-    <textarea id="spec_text" name="spec_text" rows="12" spellcheck="false" class="mono" placeholder="name: My assignment&#10;scale: 100&#10;sandbox: {image: python:3.12-slim}&#10;criteria:&#10;  - id: …">{{ form.get('spec_text', '') }}</textarea>
-    <p class="hint">Uploaded specs must be self-contained: <code>overlay</code>, <code>starter</code> and <code>prepare</code> are only available through saved specs or the CLI.</p>
   </section>
 
   <section class="card rise d1">
     <h2>2 · Roster</h2>
     <p class="muted">CSV with a header row: <code>id,name,email,repo</code> (optional <code>ref</code> to pin a commit). Repositories must be <code>https://</code> URLs.</p>
-    <label for="roster_file">Upload roster.csv</label>
+    <label class="fld" for="roster_file"><span>Upload roster.csv</span></label>
     <div class="drop"><input id="roster_file" type="file" name="roster_file" accept=".csv,text/csv"><span class="small">or drop the file here</span><span class="picked"></span></div>
-    <label for="roster_text">…or paste it</label>
-    <textarea id="roster_text" name="roster_text" rows="7" spellcheck="false" class="mono" placeholder="id,name,email,repo&#10;jdoe,Jane Doe,jdoe@example.edu,https://github.com/jdoe/lab1">{{ form.get('roster_text', '') }}</textarea>
+    <label class="fld" for="roster_text"><span>…or paste it</span></label>
+    <textarea id="roster_text" name="roster_text" rows="6" spellcheck="false" class="mono" placeholder="id,name,email,repo&#10;jdoe,Jane Doe,jdoe@example.edu,https://github.com/jdoe/lab1">{{ form.get('roster_text', '') }}</textarea>
   </section>
 
   <div class="actions"><button class="btn" type="submit" data-busy="Starting…">Start grading</button>
   <a class="btn ghost" href="{{ url_for('index') }}">Cancel</a></div>
 </form>
+<script src="{{ url_for('static', filename='builder.js') }}" defer></script>
 {% endblock %}

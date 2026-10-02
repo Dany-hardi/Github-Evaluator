@@ -41,3 +41,17 @@ def test_every_interaction_works_in_a_browser_like_environment(tmp_path, demo_ru
         server.shutdown()
     assert r.returncode == 0, r.stdout[-2500:] + r.stderr[-1500:]
     assert "FAIL" not in r.stdout and r.stdout.count("PASS") >= 20, r.stdout
+
+
+def test_the_rubric_builder_form_works_in_a_browser_like_environment(tmp_path):
+    app = create_app(tmp_path / "runs", runtime="none", specs_dir=tmp_path / "specs")
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        env = {**os.environ, "BASE": f"http://127.0.0.1:{server.server_port}"}
+        r = subprocess.run([NODE, str(SCRIPT.with_name("builder.js"))], capture_output=True, text=True, env=env, timeout=120)
+    finally:
+        server.shutdown()
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-1500:]
+    assert "FAIL" not in r.stdout and r.stdout.count("PASS") >= 14, r.stdout
+    assert len(list((tmp_path / "specs").glob("*.yaml"))) == 1, "the template saved from the page is on disk"

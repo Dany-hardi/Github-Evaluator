@@ -49,6 +49,7 @@
   }
   document.addEventListener("submit", function (ev) {
     var form = ev.target;
+    if (ev.defaultPrevented) { return; }                    /* another handler (e.g. the rubric form) cancelled it */
     var msg = form.getAttribute("data-confirm");
     if (msg && !window.confirm(msg)) { ev.preventDefault(); return; }
     var name = (nameInput && nameInput.value.trim()) || store("markbook.reviewer") || "web";

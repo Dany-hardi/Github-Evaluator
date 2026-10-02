@@ -122,7 +122,7 @@ def test_downloads(web):
 def test_new_run_validation_errors(web):
     c, _ = web
     r = post(c, "/runs/new", spec_text="", roster_text="")
-    assert r.status_code == 400 and "Provide a spec" in r.get_data(as_text=True)
+    assert r.status_code == 400 and "Build the rubric with the form" in r.get_data(as_text=True)
     r = post(c, "/runs/new", spec_text="name: x\ncriteria: []", roster_text="id,repo\na,b")
     assert r.status_code == 400 and "at least one criterion" in r.get_data(as_text=True)
 

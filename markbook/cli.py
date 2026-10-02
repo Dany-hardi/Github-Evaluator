@@ -461,13 +461,18 @@ def cmd_report(args) -> int:
 
 
 def cmd_init(args) -> int:
+    # In a real terminal with no --template, ask questions instead of dumping a template to edit.
+    # Scripts and CI (no TTY, or an explicit --template) keep the non-interactive behaviour.
+    if args.wizard or (args.template is None and sys.stdin.isatty() and sys.stdout.isatty()):
+        from .wizard import run_wizard
+        return run_wizard(Path(args.dir), force=args.force)
     dest = Path(args.dir)
     dest.mkdir(parents=True, exist_ok=True)
     spec_path = dest / "spec.yaml"
     if spec_path.exists() and not args.force:
         raise CliError(f"{spec_path} already exists (use --force to overwrite)")
     templates = {"python": _PY_TEMPLATE, "c": _C_TEMPLATE}
-    spec_path.write_text(templates[args.template], encoding="utf-8")
+    spec_path.write_text(templates[args.template or "python"], encoding="utf-8")
     roster = dest / "roster.csv"
     if not roster.exists():
         roster.write_text("id,name,email,repo\n"
@@ -529,7 +534,8 @@ def cmd_serve(args) -> int:
     specs = Path(args.specs) if args.specs else None
     if specs and not specs.is_dir():
         raise CliError(f"--specs {specs} is not a directory")
-    app = create_app(runs, runtime=args.sandbox, jobs=args.jobs, token=_token(args.token_env), specs_dir=specs)
+    app = create_app(runs, runtime=args.sandbox, jobs=args.jobs, token=_token(args.token_env), specs_dir=specs,
+                     allow_prepare=args.allow_prepare)
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         print(yellow("⚠ Binding to a non-local address: the web UI has no authentication. "
                      "Put it behind a reverse proxy with auth."), file=sys.stderr)
@@ -553,7 +559,7 @@ def cmd_demo(args) -> int:
         out = Path(ns.out) if ns.out else None
         runs = out.parent if out else DEFAULT_RUNS
         return cmd_serve(argparse.Namespace(dir=str(runs), host="127.0.0.1", port=5000, sandbox=args.sandbox,
-                                            jobs=4, token_env=None, specs=None))
+                                            jobs=4, token_env=None, specs=None, allow_prepare=False))
     return rc
 
 
@@ -660,10 +666,12 @@ def build_parser() -> argparse.ArgumentParser:
         sp.set_defaults(fn=fn)
         return sp
 
-    sp = add("init", cmd_init, "create a starter spec.yaml and roster.csv")
+    sp = add("init", cmd_init, "create spec.yaml and roster.csv (an interactive wizard in a terminal; --template for a file)")
     sp.add_argument("dir", nargs="?", default=".")
-    sp.add_argument("--template", choices=["python", "c"], default="python")
-    sp.add_argument("--force", action="store_true")
+    sp.add_argument("--template", choices=["python", "c"], default=None,
+                    help="write a starter file to edit instead of asking questions")
+    sp.add_argument("--wizard", action="store_true", help="always ask questions (answers may be piped in)")
+    sp.add_argument("--force", action="store_true", help="overwrite existing files")
 
     sp = add("validate", cmd_validate, "check a spec file and print its rubric")
     sp.add_argument("spec")
@@ -782,7 +790,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--host", default="127.0.0.1"); sp.add_argument("--port", type=int, default=5000)
     sp.add_argument("--sandbox", choices=RUNTIMES, default="docker")
     sp.add_argument("--jobs", type=int, default=4); sp.add_argument("--token-env")
-    sp.add_argument("--specs", help="directory of saved *.yaml specs offered in the UI (may use overlay/starter)")
+    sp.add_argument("--specs", help="directory of saved rubric templates (default: <runs dir>/../specs); may use overlay/starter")
+    sp.add_argument("--allow-prepare", action="store_true",
+                    help="let the rubric form install extra packages (downloaded with network access); off by default")
 
     sp = add("demo", cmd_demo, "generate a sample cohort and grade it (offline, ~2 s)")
     sp.add_argument("--dir"); sp.add_argument("--out")
@@ -793,15 +803,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def banner(unicode_ok: bool = True) -> str:
-    """The Markbook mark (a bookmark with a tick) for the terminal. ASCII fallback for limited locales."""
-    if unicode_ok:
-        mark = [green("  ╭──╮"), green("  │") + yellow("✔ ") + green("│"), green("  │  │"), green("  ╰╲╱╯")]
-    else:
-        mark = [green("  .--."), green("  |") + yellow("v ") + green("|"), green("  |  |"), green("  `\\/'")]
-    text = ["", bold(f"Markbook {__version__}"), dim("Grade repositories. Review only what matters."), ""]
-    hints = ["", dim("try it offline:   ") + "markbook demo", dim("start a course:   ") + "markbook init", ""]
-    rows = [f"{m}  {t}" for m, t in zip(mark, text)]
-    return "\n".join(rows + [f"        {h}" for h in hints[1:3]])
+    """The Markbook logo for the terminal: the name, finished by the tick. ASCII fallback for limited locales."""
+    tick = green("✔") if unicode_ok else green("[v]")
+    return "\n".join(["", f"  {bold('Markbook')} {tick}  {dim(__version__)}", "  " + dim("Grade repositories. Review only what matters."), "",
+                      "  " + dim("try it offline:   ") + "markbook demo", "  " + dim("start a course:   ") + "markbook init", ""])
 
 
 def main(argv: list[str] | None = None) -> int:

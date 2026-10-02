@@ -19,7 +19,7 @@ PKG = ROOT / "markbook"
 STATIC = PKG / "web" / "static"
 TEMPLATES = PKG / "web" / "templates"
 BRAND = ROOT / "docs" / "assets" / "brand"
-PALETTE = {"#10223A", "#19B37D", "#FFD43B", "#FFFFFF"}      # ink, marker green, highlighter, white
+PALETTE = {"#10223A", "#19B37D", "#FFD43B", "#FFFFFF", "#FBFAF6"}      # ink, marker green, highlighter, white, paper
 
 
 @pytest.fixture
@@ -136,7 +136,26 @@ def test_the_header_mark_is_the_published_logo():
     macro = (TEMPLATES / "_ui.html").read_text()
     in_template = _paths(macro.split("{% macro mark")[1].split("{%- endmacro")[0])
     in_brand = _paths((BRAND / "mark-bare.svg").read_text())
-    assert in_template == in_brand and len(in_brand) == 3, "template mark drifted from docs/assets/brand/mark-bare.svg"
+    assert in_template == in_brand and len(in_brand) == 2, "template mark drifted from docs/assets/brand/mark-bare.svg"
+
+
+def test_the_header_wordmark_is_the_published_wordmark():
+    macro = (TEMPLATES / "_ui.html").read_text()
+    in_template = _paths(macro.split("{% macro wordmark")[1].split("{%- endmacro")[0])
+    for name in ("wordmark.svg", "wordmark-on-dark.svg", "wordmark-animated.svg", "wordmark-animated-on-dark.svg"):
+        assert in_template == _paths((BRAND / name).read_text()) and len(in_template) == 2, name
+
+
+def test_the_signature_is_written_then_ticked_in_the_splash_and_only_there():
+    word = re.search(r"\.splash \.wm \.word \{([^}]*)\}", CSS).group(1)
+    tick = re.search(r"\.splash \.wm \.tick \{([^}]*)\}", CSS).group(1)
+    assert "animation: write" in word and "clip-path" in word, "the word starts hidden and is written on"
+    d_word = float(re.search(r"animation: write ([\d.]+)s[^;]*? ([\d.]+)s forwards", word).group(2)) + float(re.search(r"write ([\d.]+)s", word).group(1))
+    d_tick = float(re.search(r"draw [\d.]+s ease ([\d.]+)s", tick).group(1))
+    assert d_tick >= d_word - .1, "the tick is drawn after the word is finished"
+    assert "stroke-dashoffset: 1" in tick
+    assert re.search(r"@keyframes write \{[^}]*clip-path[^}]*\}[^}]*clip-path", CSS)
+    assert ".wm .word { fill: currentColor; }" in CSS, "outside the splash the word is plainly visible"
 
 
 @pytest.mark.parametrize("path", sorted(BRAND.glob("*.svg")) + [STATIC / "favicon.svg"], ids=lambda p: p.name)
@@ -299,7 +318,7 @@ def _run(args, env_extra=None):
 def test_bare_command_prints_the_mark_and_help_and_succeeds():
     r = _run([])
     assert r.returncode == 0 and "Markbook" in r.stdout and "markbook demo" in r.stdout and "usage: markbook" in r.stdout
-    assert "╭──╮" in r.stdout or ".--." in r.stdout
+    assert "Markbook ✔" in r.stdout or "Markbook [v]" in r.stdout
 
 
 def test_help_and_banner_never_crash_on_an_ascii_terminal():
@@ -307,4 +326,4 @@ def test_help_and_banner_never_crash_on_an_ascii_terminal():
         r = _run(args, {"PYTHONIOENCODING": "ascii", "NO_COLOR": "1"})
         assert r.returncode == 0, (args, r.stderr[-300:])
         assert "UnicodeEncodeError" not in r.stderr
-    assert ".--." in _run([], {"PYTHONIOENCODING": "ascii"}).stdout, "ascii-safe mark when the terminal can't draw boxes"
+    assert "[v]" in _run([], {"PYTHONIOENCODING": "ascii"}).stdout, "ascii-safe tick when the terminal can't draw it"

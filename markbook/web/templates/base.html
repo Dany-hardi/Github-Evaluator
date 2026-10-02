@@ -1,4 +1,4 @@
-{% from "_ui.html" import mark %}<!doctype html>
+{% from "_ui.html" import mark, wordmark %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -18,8 +18,7 @@
 <body>
   <div id="splash" class="splash" aria-hidden="true">
     <div class="splash-inner">
-      {{ mark() }}
-      <span class="wordmark"><b>Mark</b><span>book</span></span>
+      {{ wordmark() }}
       <p class="tagline">Grade repositories. Review only what matters.</p>
     </div>
     <p class="skip-note">Click or press any key to skip</p>
@@ -28,7 +27,7 @@
   <a class="skip" href="#main">Skip to content</a>
   <header class="top">
     <div class="wrap top-inner">
-      <a class="brand" href="{{ url_for('index') }}" aria-label="Markbook, home">{{ mark() }}<span class="wordmark"><b>Mark</b><span>book</span></span></a>
+      <a class="brand" href="{{ url_for('index') }}" aria-label="Markbook, home">{{ wordmark() }}</a>
       <nav aria-label="Primary">
         <label class="reviewer"><span class="sr">Reviewer name</span><input id="reviewer-name" type="text" placeholder="Reviewer" maxlength="60" autocomplete="name"></label>
         <a href="{{ url_for('index') }}">Runs</a>
@@ -53,7 +52,7 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="wrap foot">
-    <span class="wordmark"><b>Mark</b><span>book</span></span>
+    <span class="foot-brand">{{ wordmark() }}</span>
     <span>v{{ version }}</span><span aria-hidden="true">·</span>
     <span>sandbox: {{ runtime }}</span><span aria-hidden="true">·</span>
     <span>the same engine as the <code>markbook</code> CLI</span>
