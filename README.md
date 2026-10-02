@@ -49,6 +49,15 @@ FizzBuzz CLI (demo)  (grades out of 20; * = pending manual review)
 
 <p align="center"><sub>The same run in the web UI: what needs a human, why, and one click to start reviewing. Both themes ship; it follows your system.</sub></p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/builder-dark.png">
+    <img alt="The New run page: tick the checks, set the points, and Markbook writes the YAML spec live" src="docs/assets/screenshots/builder-light.png" width="860">
+  </picture>
+</p>
+
+<p align="center"><sub><b>No YAML to write.</b> Teachers tick what to check and set the points; the spec is written live beside the form (or answer the questions in <code>markbook init</code> in a terminal).</sub></p>
+
 <table>
   <tr>
     <td width="50%">
