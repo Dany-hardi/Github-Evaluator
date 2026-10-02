@@ -534,7 +534,8 @@ def cmd_serve(args) -> int:
     specs = Path(args.specs) if args.specs else None
     if specs and not specs.is_dir():
         raise CliError(f"--specs {specs} is not a directory")
-    app = create_app(runs, runtime=args.sandbox, jobs=args.jobs, token=_token(args.token_env), specs_dir=specs)
+    app = create_app(runs, runtime=args.sandbox, jobs=args.jobs, token=_token(args.token_env), specs_dir=specs,
+                     allow_prepare=args.allow_prepare)
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         print(yellow("⚠ Binding to a non-local address: the web UI has no authentication. "
                      "Put it behind a reverse proxy with auth."), file=sys.stderr)
@@ -558,7 +559,7 @@ def cmd_demo(args) -> int:
         out = Path(ns.out) if ns.out else None
         runs = out.parent if out else DEFAULT_RUNS
         return cmd_serve(argparse.Namespace(dir=str(runs), host="127.0.0.1", port=5000, sandbox=args.sandbox,
-                                            jobs=4, token_env=None, specs=None))
+                                            jobs=4, token_env=None, specs=None, allow_prepare=False))
     return rc
 
 
@@ -789,7 +790,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--host", default="127.0.0.1"); sp.add_argument("--port", type=int, default=5000)
     sp.add_argument("--sandbox", choices=RUNTIMES, default="docker")
     sp.add_argument("--jobs", type=int, default=4); sp.add_argument("--token-env")
-    sp.add_argument("--specs", help="directory of saved *.yaml specs offered in the UI (may use overlay/starter)")
+    sp.add_argument("--specs", help="directory of saved rubric templates (default: <runs dir>/../specs); may use overlay/starter")
+    sp.add_argument("--allow-prepare", action="store_true",
+                    help="let the rubric form install extra packages (downloaded with network access); off by default")
 
     sp = add("demo", cmd_demo, "generate a sample cohort and grade it (offline, ~2 s)")
     sp.add_argument("--dir"); sp.add_argument("--out")

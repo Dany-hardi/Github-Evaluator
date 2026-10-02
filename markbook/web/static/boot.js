@@ -4,6 +4,7 @@
 (function () {
   "use strict";
   var root = document.documentElement;
+  root.classList.add("js");
   try {
     var q = new URLSearchParams(location.search);
     var theme = q.get("theme");
