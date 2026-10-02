@@ -461,13 +461,18 @@ def cmd_report(args) -> int:
 
 
 def cmd_init(args) -> int:
+    # In a real terminal with no --template, ask questions instead of dumping a template to edit.
+    # Scripts and CI (no TTY, or an explicit --template) keep the non-interactive behaviour.
+    if args.wizard or (args.template is None and sys.stdin.isatty() and sys.stdout.isatty()):
+        from .wizard import run_wizard
+        return run_wizard(Path(args.dir), force=args.force)
     dest = Path(args.dir)
     dest.mkdir(parents=True, exist_ok=True)
     spec_path = dest / "spec.yaml"
     if spec_path.exists() and not args.force:
         raise CliError(f"{spec_path} already exists (use --force to overwrite)")
     templates = {"python": _PY_TEMPLATE, "c": _C_TEMPLATE}
-    spec_path.write_text(templates[args.template], encoding="utf-8")
+    spec_path.write_text(templates[args.template or "python"], encoding="utf-8")
     roster = dest / "roster.csv"
     if not roster.exists():
         roster.write_text("id,name,email,repo\n"
@@ -660,10 +665,12 @@ def build_parser() -> argparse.ArgumentParser:
         sp.set_defaults(fn=fn)
         return sp
 
-    sp = add("init", cmd_init, "create a starter spec.yaml and roster.csv")
+    sp = add("init", cmd_init, "create spec.yaml and roster.csv (an interactive wizard in a terminal; --template for a file)")
     sp.add_argument("dir", nargs="?", default=".")
-    sp.add_argument("--template", choices=["python", "c"], default="python")
-    sp.add_argument("--force", action="store_true")
+    sp.add_argument("--template", choices=["python", "c"], default=None,
+                    help="write a starter file to edit instead of asking questions")
+    sp.add_argument("--wizard", action="store_true", help="always ask questions (answers may be piped in)")
+    sp.add_argument("--force", action="store_true", help="overwrite existing files")
 
     sp = add("validate", cmd_validate, "check a spec file and print its rubric")
     sp.add_argument("spec")
