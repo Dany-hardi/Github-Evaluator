@@ -82,9 +82,8 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
        border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }
 .top-inner { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 60px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
-.brand .mark { width: 24px; height: 36px; flex: none; overflow: visible; }
-.wordmark { font-family: var(--display); font-size: 1.45rem; letter-spacing: -.02em; line-height: 1; }
-.wordmark b { font-weight: 800; } .wordmark span { font-weight: 400; }
+.brand .wm { height: 34px; width: auto; flex: none; overflow: visible; }
+.wm { display: block; overflow: visible; } .wm .word { fill: currentColor; } .wm .tick { fill: none; stroke: var(--brand-bright); }
 .top nav { display: flex; align-items: center; gap: 6px; }
 .top nav > a:not(.btn) { color: var(--ink); text-decoration: none; font-weight: 600; padding: 8px 12px; border-radius: 10px; }
 .top nav > a:not(.btn):hover { background: var(--surface-2); }
@@ -98,7 +97,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ico-sun { display: block; } :root:not([data-theme="light"]) .ico-moon { display: none; } }
 .banner { padding: 9px 0; font-size: .9rem; } .banner.warn { background: var(--warn-soft); color: var(--warn); border-bottom: 1px solid var(--line); }
 .foot { color: var(--muted); font-size: .82rem; padding-bottom: 36px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.foot .wordmark { font-size: 1rem; color: var(--ink); }
+.foot-brand { display: inline-flex; color: var(--ink); } .foot-brand .wm { height: 22px; width: auto; }
 .crumb { font-size: .85rem; color: var(--muted); margin-bottom: 8px; } .crumb a { color: var(--muted); }
 
 /* ── page scaffolding ───────────────────────────────────────────────────── */
@@ -107,7 +106,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 .stack > * + * { margin-top: 16px; } .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 .grid-2 > *, .stats > * { min-width: 0; }
-@media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } .reviewer { display: none; } .wordmark { font-size: 1.25rem; } }
+@media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } .reviewer { display: none; } .brand .wm { height: 30px; } }
 @media (max-width: 560px) { #help-open { display: none; } .top nav .btn { white-space: nowrap; }
   .wrap { padding: 0 14px; } .ring { width: 46px; height: 46px; } .hero { border-radius: 16px; } .page-head { margin-bottom: 16px; } }
 
@@ -209,7 +208,7 @@ details.menu > summary { list-style: none; } details.menu > summary::-webkit-det
 .hero { position: relative; border: 1px solid var(--line); border-radius: 20px; background-color: var(--surface); background-image: var(--ledger);
         background-position: 0 14px; padding: 44px 40px 40px 84px; margin-bottom: 20px; box-shadow: var(--shadow); overflow: hidden; }
 .hero::before { content: ""; position: absolute; inset: 0 auto 0 62px; width: 2px; background: rgba(229, 72, 77, .55); }
-.hero .mark-xl { position: absolute; right: 32px; top: 24px; width: 92px; height: 138px; opacity: .95; }
+.hero .mark-xl { position: absolute; right: 32px; top: 24px; width: 120px; height: auto; opacity: .95; }
 .hero h1 { font-size: clamp(2rem, 5vw, 3.1rem); max-width: 14ch; }
 .hero h1 em { font-style: normal; background: linear-gradient(transparent 58%, var(--hl) 58% 92%, transparent 92%); padding: 0 4px; margin: 0 -4px; }
 .hero p.lead { font-size: 1.1rem; max-width: 46ch; color: var(--muted); margin: 14px 0 22px; }
@@ -223,7 +222,7 @@ details.menu > summary { list-style: none; } details.menu > summary::-webkit-det
 .cmd code { background: none; color: inherit; padding: 0; flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; } .cmd .prompt { color: var(--brand-bright); user-select: none; }
 .cmd button { all: unset; cursor: pointer; padding: 4px 10px; border-radius: 8px; font-family: var(--font); font-size: .78rem; font-weight: 700; background: rgba(255,255,255,.12); }
 .cmd button:hover { background: rgba(255,255,255,.22); } .cmd button:focus-visible { outline: 3px solid var(--hl); }
-.empty { text-align: center; padding: 44px 18px; } .empty .mark { width: 54px; height: 80px; margin: 0 auto 12px; display: block; }
+.empty { text-align: center; padding: 44px 18px; } .empty .mark { width: 84px; height: auto; margin: 0 auto 12px; display: block; }
 
 /* ── submission review ──────────────────────────────────────────────────── */
 .scorebar { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; align-items: center; }
@@ -250,7 +249,7 @@ details.menu > summary { list-style: none; } details.menu > summary::-webkit-det
 /* ── progress page ──────────────────────────────────────────────────────── */
 .working { text-align: center; padding: 40px 18px 34px; }
 .working .ring-wrap { margin: 6px auto 18px; } .working .ring { width: 150px; height: 150px; } .working .ring circle { stroke-width: 3.2; }
-.working .ring-n { font-size: 2rem !important; } .working .mark-in { position: absolute; width: 38px; height: 56px; }
+.working .ring-n { font-size: 2rem !important; } .working .mark-in { position: absolute; width: 50px; height: auto; }
 .working .active-chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; min-height: 28px; }
 
 /* ── dialog ─────────────────────────────────────────────────────────────── */
@@ -304,29 +303,28 @@ pre.yaml code { background: none; padding: 0; color: inherit; font-size: inherit
 .save-template .fld { width: 100%; margin: 0; }
 
 /* ── the mark and its motion ────────────────────────────────────────────── */
-.mark .bm { fill: var(--brand-bright); } .mark .hl { fill: var(--hl); } .mark .tk { fill: none; stroke: #10223A; stroke-width: 4.6; stroke-linecap: round; stroke-linejoin: round; }
-.brand:hover .tk { animation: draw .55s ease both; }
+.mark .m { fill: var(--ink); stroke: var(--ink); } .mark .tk { fill: none; stroke: var(--brand-bright); }
+.brand:hover .tick { animation: draw .55s ease both; }
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes drop { 0% { transform: translateY(-120px) rotate(-8deg); opacity: 0; } 60% { opacity: 1; } 75% { transform: translateY(8px) rotate(1.5deg); } 100% { transform: none; opacity: 1; } }
-@keyframes swipe { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes write { from { clip-path: polygon(0 0, 0 0, -14% 100%, 0 100%); } to { clip-path: polygon(0 0, 114% 0, 100% 100%, 0 100%); } }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes slide-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 @keyframes splash-out { to { opacity: 0; visibility: hidden; } }
 @keyframes spin-slow { to { transform: rotate(360deg); } }
-.tk[pathLength] { stroke-dasharray: 1; }
+.tick[pathLength], .tk[pathLength] { stroke-dasharray: 1; }
 .rise { animation: rise .5s ease both; } .rise.d1 { animation-delay: .06s; } .rise.d2 { animation-delay: .12s; } .rise.d3 { animation-delay: .18s; } .rise.d4 { animation-delay: .24s; }
 
 /* intro splash: once per browser session, on the home page only (see boot.js); skippable */
 .splash { position: fixed; inset: 0; z-index: 300; display: none; place-items: center; background: var(--splash-bg); color: #F4F1E8; cursor: pointer;
           background-image: radial-gradient(60vmax 60vmax at 50% 38%, #14304f 0%, transparent 60%); }
-html.splash-on .splash { display: grid; animation: splash-out .5s ease 2s forwards; }
+html.splash-on .splash { display: grid; animation: splash-out .5s ease 2.9s forwards; }
 .splash-inner { text-align: center; padding: 24px; }
-.splash .mark { width: 92px; height: 138px; overflow: visible; animation: drop .85s cubic-bezier(.2, .9, .3, 1) .05s both; }
-.splash .mark .tk { stroke-dashoffset: 1; animation: draw .5s ease .68s forwards; }
-.splash .mark .hl { transform-box: fill-box; transform-origin: left center; transform: scaleX(0); animation: swipe .32s ease .5s forwards; }
-.splash .wordmark { display: block; font-size: clamp(2.4rem, 8vw, 3.6rem); margin-top: 18px; animation: rise .6s ease .95s both; }
-.splash .tagline { color: #A9B8CE; margin-top: 10px; font-size: 1.02rem; animation: rise .6s ease 1.2s both; }
-.splash .skip-note { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; color: #6F82A0; font-size: .8rem; animation: rise .5s ease 1.35s both; }
+/* the signature is written left to right on a slanted edge, then the tick is drawn */
+.splash .wm { width: min(80vw, 560px); height: auto; margin: 0 auto; }
+.splash .wm .word { fill: #F4F1E8; clip-path: polygon(0 0, 0 0, -14% 100%, 0 100%); animation: write 1.35s cubic-bezier(.45, .05, .35, 1) .2s forwards; }
+.splash .wm .tick { stroke-dashoffset: 1; animation: draw .4s ease 1.5s forwards; }
+.splash .tagline { color: #A9B8CE; margin-top: 22px; font-size: 1.02rem; animation: rise .6s ease 1.95s both; }
+.splash .skip-note { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; color: #6F82A0; font-size: .8rem; animation: rise .5s ease 2.1s both; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-delay: 0ms !important; transition-duration: .001ms !important; }

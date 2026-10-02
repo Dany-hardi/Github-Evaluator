@@ -803,15 +803,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def banner(unicode_ok: bool = True) -> str:
-    """The Markbook mark (a bookmark with a tick) for the terminal. ASCII fallback for limited locales."""
-    if unicode_ok:
-        mark = [green("  ╭──╮"), green("  │") + yellow("✔ ") + green("│"), green("  │  │"), green("  ╰╲╱╯")]
-    else:
-        mark = [green("  .--."), green("  |") + yellow("v ") + green("|"), green("  |  |"), green("  `\\/'")]
-    text = ["", bold(f"Markbook {__version__}"), dim("Grade repositories. Review only what matters."), ""]
-    hints = ["", dim("try it offline:   ") + "markbook demo", dim("start a course:   ") + "markbook init", ""]
-    rows = [f"{m}  {t}" for m, t in zip(mark, text)]
-    return "\n".join(rows + [f"        {h}" for h in hints[1:3]])
+    """The Markbook logo for the terminal: the name, finished by the tick. ASCII fallback for limited locales."""
+    tick = green("✔") if unicode_ok else green("[v]")
+    return "\n".join(["", f"  {bold('Markbook')} {tick}  {dim(__version__)}", "  " + dim("Grade repositories. Review only what matters."), "",
+                      "  " + dim("try it offline:   ") + "markbook demo", "  " + dim("start a course:   ") + "markbook init", ""])
 
 
 def main(argv: list[str] | None = None) -> int:

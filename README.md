@@ -1,9 +1,11 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/banner-dark.png">
-    <img alt="Markbook: grade repositories, review only what matters" src="docs/assets/brand/banner-light.png" width="680">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/wordmark-animated-on-dark.svg">
+    <img alt="Markbook" src="docs/assets/brand/wordmark-animated.svg" width="520">
   </picture>
 </p>
+
+<p align="center"><strong>Grade repositories. Review only what matters.</strong></p>
 
 <p align="center">
   <a href="https://github.com/Dany-hardi/markbook/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Dany-hardi/markbook/actions/workflows/ci.yml/badge.svg"></a>
