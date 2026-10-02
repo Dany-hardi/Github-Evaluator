@@ -98,7 +98,8 @@ From a clone: `python3 -m venv .venv && . .venv/bin/activate && pip install -e '
 
 ```bash
 markbook demo                                  # see the whole thing work, offline, no Docker needed
-markbook init my-course --template python      # writes spec.yaml + roster.csv to edit
+markbook init my-course                        # interactive wizard: answer questions, get spec.yaml + roster.csv
+# or: markbook init my-course --template python   # a starting file to edit by hand
 markbook validate my-course/spec.yaml          # catches every spec mistake up front
 markbook grade my-course/spec.yaml --roster my-course/roster.csv --lms canvas
 markbook review .markbook/runs/<run-id>             # what still needs a human, with the command to resolve it
@@ -129,9 +130,18 @@ roster ──► git clone ──► history & fingerprints ──► sandbox: b
 
 The raw result (`run.json`) is never edited. Human decisions go to a separate, append-only `overrides.json`; reports are recomputed from both. Every grade is explainable (each criterion carries its evidence) and every change is attributable.
 
+## Building a rubric without writing YAML
+
+Teachers should not have to learn a file format. Both front ends ask for **choices** (what to check, how many points) and Markbook writes the spec:
+
+- **Terminal:** `markbook init DIR` starts a wizard when run in a terminal (`--wizard` forces it, `--template` skips it). It asks for the name, grade scale, deadline and late penalty, language, then offers each check with a default; pressing Enter everywhere gives a sensible rubric. It re-asks on bad answers, validates the result with `markbook validate`, never overwrites without asking (`--force`), and writes nothing if you press Ctrl-C.
+- **Web:** *New run → Build it with the form*. Tick checks, set points; a live panel shows the total and the YAML being written, with *Copy*, *Download spec.yaml* and *Save as a template* (stored in `<runs dir>/../specs`, re-editable from the *A saved template* tab).
+
+The browser and the wizard never send commands: they send choices, and one shared builder (`markbook/specbuilder.py`) turns them into fixed, vetted commands. Extra pip/npm packages are free text, so they are off in the web UI unless the operator starts `markbook serve --allow-prepare`; the wizard always offers them (it is your own terminal). The generated spec goes through the same `load_spec` validation as a hand-written one.
+
 ## Writing a spec
 
-A spec is YAML. `markbook init` writes a starting point; `markbook validate` checks it and lists every problem at once.
+A spec is YAML you can still write by hand. `markbook init` writes a starting point; `markbook validate` checks it and lists every problem at once.
 
 ```yaml
 name: "Lab 3: FizzBuzz"
@@ -269,7 +279,7 @@ markbook grade spec.yaml --roster roster.pinned.csv
 ## CLI reference
 
 ```
-markbook init [DIR] [--template python|c] [--force]
+markbook init [DIR] [--wizard | --template python|c] [--force]
 markbook validate SPEC
 markbook pin SPEC --roster CSV [--out CSV] [--at now|deadline] [--bundle DIR] [--token-env VAR] [--jobs N]
 markbook grade SPEC (--roster CSV | --repo URL ...) [options]
@@ -288,7 +298,7 @@ markbook report RUN [--lms canvas|moodle ...] [--include-pending] [--out DIR]
 markbook schema
 markbook doctor [--clean]
 markbook ai-check [--model M] [--suite] [--json] [--max-cost-usd N]
-markbook serve [--dir DIR] [--host H] [--port P] [--sandbox docker|podman|none]
+markbook serve [--dir DIR] [--host H] [--port P] [--sandbox docker|podman|none] [--allow-prepare]
 markbook demo [--dir DIR] [--out DIR] [--serve]
 ```
 

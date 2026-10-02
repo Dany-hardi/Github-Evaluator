@@ -297,7 +297,7 @@ html:not(.js) #panel-builder, html:not(.js) .tabs { display: none; }
 .problems { margin: 0 0 10px; padding-left: 20px; color: var(--bad); font-size: .9rem; } .problems:empty { display: none; }
 .flash .problems { color: inherit; margin: 6px 0 0; }
 pre.yaml { margin: 8px 0 12px; background: var(--ink); color: #E6EDF7; border-radius: 10px; padding: 12px 14px; max-height: 360px; overflow: auto;
-           font-size: .8rem; line-height: 1.5; white-space: pre; }
+           font-size: .8rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 :root[data-theme="dark"] pre.yaml { background: #070F1B; border: 1px solid var(--line); }
 pre.yaml code { background: none; padding: 0; color: inherit; font-size: inherit; }
 .save-template { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line-strong); display: grid; gap: 8px; justify-items: start; }

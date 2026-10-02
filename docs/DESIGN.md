@@ -109,6 +109,9 @@ CSV grade columns are blank for `pending_review` and `error` submissions unless 
 ### Plain-file reports and a published schema
 `report.json` has a JSON Schema (`markbook schema`) and a `schema_version`. The tests validate real output against it, including output with overrides applied, so the contract is enforced rather than aspirational. Also: JUnit XML so any CI can show a cohort natively, and CSV cells are written with Python's `csv` writer (a test round-trips hostile names).
 
+### Rubric builder: choices in, vetted YAML out
+Asking teachers to hand-write YAML contradicts "automated". One module (`specbuilder.build`) takes a plain model of choices and returns the spec, the YAML text, field-level problems and the total points; the web form and the terminal wizard are both thin front ends on it. The key property: the client never supplies a command. Commands are chosen server-side from a curated catalogue, names and images pass strict regexes, newline/tab become spaces (never deleted, so `"a\nb"` cannot collapse into a valid-looking `"ab"`), and the only free text that reaches a shell, extra packages, is gated behind `--allow-prepare` and a package-name regex. The output is validated by the ordinary `load_spec`, so a generated spec is held to the same bar as a hand-written one. Tests include hostile payloads, YAML round-trips, a mutation check that the packages gate really fails closed, and a jsdom test of the page.
+
 ### Web UI: server-rendered, strict, offline
 No SPA, no CDN, no inline script or style (a test checks), strict CSP. A grading UI is a form-and-table application; server rendering is simpler to secure and to run offline. Progress is polled from `status.json` on disk, so a reload or a server restart never loses state (an interrupted run is marked failed on startup rather than hanging forever). Resolving a submission redirects to the next item in the review queue, because reviewing forty repositories should be a flow.
 

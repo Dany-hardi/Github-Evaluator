@@ -11,7 +11,7 @@
   function $(s, c) { return (c || document).querySelector(s); }
   function $all(s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); }
   var CODE_KINDS = { build: 1, output: 1, tests: 1 };
-  var mode = "builder", timer = null, lastOk = null, seq = 0;
+  var mode = "builder", timer = null, lastOk = null, seq = 0, touched = false;   /* don't scold before the first edit */
 
   /* ── reading the form into a model ─────────────────────────────────────── */
   function val(el) { return el ? el.value : ""; }
@@ -154,15 +154,18 @@
       .then(function (d) {
         if (mine !== seq) { return; }                                 /* a newer request is in flight */
         lastOk = !!d.ok;
-        $("#yaml-preview").textContent = d.ok ? d.yaml : "The rubric is not ready yet; fix the points listed above and the YAML will appear here.";
-        showProblems(d.problems);
+        $("#yaml-preview").textContent = d.ok ? d.yaml
+          : (touched ? "The rubric is not ready yet. Fix what is listed above and the YAML appears here."
+                     : "Fill in the form and the rubric appears here.");
+        showProblems(touched ? d.problems : []);
       })
       .catch(function () { lastOk = null; });
   }
   function schedule() { refresh(); clearTimeout(timer); timer = setTimeout(preview, 250); }
 
-  root.addEventListener("input", schedule);
-  root.addEventListener("change", schedule);
+  function edited() { touched = true; schedule(); }
+  root.addEventListener("input", edited);
+  root.addEventListener("change", edited);
 
   /* A one-line field inside a form submits it on Enter: that would start grading. Don't. */
   root.addEventListener("keydown", function (ev) {
@@ -233,6 +236,7 @@
     if (mode !== "builder") { return; }
     if (lastOk === false) {                                           /* we already know it is not valid: say so now */
       ev.preventDefault();
+      touched = true; preview();
       $("#problems").scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
